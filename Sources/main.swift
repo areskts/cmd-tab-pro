@@ -122,18 +122,21 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         isReopenEnabled: { [weak self] in self?.controller.isEnabled ?? false },
         setReopenEnabled: { [weak self] enabled in self?.setReopenEnabled(enabled) },
         loginStatus: { SMAppService.mainApp.status },
-        setLoginEnabled: { [weak self] enabled in try self?.setLoginEnabled(enabled) }
+        setLoginEnabled: { [weak self] enabled in try self?.setLoginEnabled(enabled) },
+        interfaceTheme: { [weak self] in self?.interfaceTheme() ?? .system },
+        setInterfaceTheme: { [weak self] theme in self?.setInterfaceTheme(theme) }
     )
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let menu = NSMenu()
     private let statusMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let openMenuItem = NSMenuItem(title: "打开 Cmd Tab Pro…", action: #selector(openDashboard), keyEquivalent: ",")
-    private let enabledMenuItem = NSMenuItem(title: "自动呼起窗口", action: #selector(toggleEnabled), keyEquivalent: "")
+    private let enabledMenuItem = NSMenuItem(title: "自动唤回窗口", action: #selector(toggleEnabled), keyEquivalent: "")
     private let loginMenuItem = NSMenuItem(title: "登录时启动", action: #selector(toggleLoginItem), keyEquivalent: "")
     private let hideMenuItem = NSMenuItem(title: "隐藏菜单栏图标…", action: #selector(hideStatusItem), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        applyInterfaceTheme(interfaceTheme())
         setupMenu()
         controller.start()
         let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool
@@ -169,7 +172,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     private func refreshMenu() {
-        statusMenuItem.title = controller.isEnabled ? "自动呼起：已启用" : "自动呼起：已暂停"
+        statusMenuItem.title = controller.isEnabled ? "窗口唤回：已开启" : "窗口唤回：已暂停"
         statusMenuItem.image = NSImage(
             systemSymbolName: controller.isEnabled ? "checkmark.circle.fill" : "pause.circle",
             accessibilityDescription: statusMenuItem.title
@@ -239,6 +242,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         }
         refreshMenu()
         dashboard.refresh()
+    }
+
+    private func interfaceTheme() -> InterfaceTheme {
+        guard let value = UserDefaults.standard.string(forKey: "interfaceTheme") else { return .system }
+        return InterfaceTheme(rawValue: value) ?? .system
+    }
+
+    private func setInterfaceTheme(_ theme: InterfaceTheme) {
+        UserDefaults.standard.set(theme.rawValue, forKey: "interfaceTheme")
+        applyInterfaceTheme(theme)
+    }
+
+    private func applyInterfaceTheme(_ theme: InterfaceTheme) {
+        NSApp.appearance = theme.appearance
     }
 
     private func showError(_ title: String, _ message: String) {

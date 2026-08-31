@@ -85,13 +85,16 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 
 正常手动启动或再次打开 App 时展示主页面；登录时自动启动保持菜单栏常驻，不主动弹出窗口。关闭主页面不会退出应用。
 
-主页面使用 AppKit 原生窗口、NSVisualEffectView、NSSwitch、系统字体和动态颜色，包含今日计数、7 天合计、7 天柱状图、Top 5 App 和两项设置。
+主页面使用 AppKit 原生窗口、NSVisualEffectView、NSSwitch、NSPopUpButton、系统字体和动态颜色，包含今日计数、7 天合计、7 天柱状图、Top 5 App 和三项设置。
+
+主窗口固定为 760 × 720，暂不提供自由缩放，避免小尺寸下统计和设置区域被压缩。
 
 菜单仅提供：
 
 - 当前运行状态
-- 启用或暂停
+- 开启或暂停窗口自动唤回
 - 登录时启动
+- 界面主题：跟随系统、浅色或深色
 - 隐藏菜单栏图标，重新打开应用可恢复
 - 打开主页面
 - 退出
@@ -133,10 +136,10 @@ scripts/install.sh 负责：
 1. 校验 Info.plist。
 2. 编译 arm64 Release 可执行文件。
 3. 运行内置决策自检。
-4. 组装并 ad-hoc 签名 Cmd Tab Pro.app。
+4. 组装并 ad-hoc 签名 CmdTabPro.app。
 5. 正常终止已安装的旧版本。
 6. 失败时恢复旧 app bundle。
-7. 安装到 /Applications/Cmd Tab Pro.app 并启动。
+7. 安装到 /Applications/CmdTabPro.app 并启动。
 
 登录时启动使用 SMAppService.mainApp，由用户在菜单栏开关。
 
@@ -188,7 +191,7 @@ scripts/install.sh 负责：
 
 工具不修改系统 Cmd+Tab，不写目标应用数据。退出应用即可停止功能。卸载前关闭登录时启动，然后删除：
 
-    /Applications/Cmd Tab Pro.app
+    /Applications/CmdTabPro.app
 
 ## 13. 开源准备
 

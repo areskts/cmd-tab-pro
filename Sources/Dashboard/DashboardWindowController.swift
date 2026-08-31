@@ -1,30 +1,53 @@
 import AppKit
 import ServiceManagement
 
+enum InterfaceTheme: String, CaseIterable {
+    case system
+    case light
+    case dark
+
+    var title: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .light: return "浅色"
+        case .dark: return "深色"
+        }
+    }
+
+    var appearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 final class DashboardWindowController: NSWindowController {
     private let dashboardViewController: DashboardViewController
     private var hasCentered = false
 
     init(statistics: SwitchStatisticsStore, isReopenEnabled: @escaping () -> Bool,
          setReopenEnabled: @escaping (Bool) -> Void, loginStatus: @escaping () -> SMAppService.Status,
-         setLoginEnabled: @escaping (Bool) throws -> Void) {
+         setLoginEnabled: @escaping (Bool) throws -> Void, interfaceTheme: @escaping () -> InterfaceTheme,
+         setInterfaceTheme: @escaping (InterfaceTheme) -> Void) {
         dashboardViewController = DashboardViewController(
             statistics: statistics, isReopenEnabled: isReopenEnabled, setReopenEnabled: setReopenEnabled,
-            loginStatus: loginStatus, setLoginEnabled: setLoginEnabled
+            loginStatus: loginStatus, setLoginEnabled: setLoginEnabled, interfaceTheme: interfaceTheme,
+            setInterfaceTheme: setInterfaceTheme
         )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 680),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 720),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered, defer: false
         )
         super.init(window: window)
         window.contentViewController = dashboardViewController
+        window.setContentSize(NSSize(width: 760, height: 720))
         window.title = "Cmd Tab Pro"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 700, height: 620)
-        window.setFrameAutosaveName("CmdTabProDashboard")
     }
 
     required init?(coder: NSCoder) { nil }
@@ -51,23 +74,28 @@ private final class DashboardViewController: NSViewController {
     private let setReopenEnabled: (Bool) -> Void
     private let loginStatus: () -> SMAppService.Status
     private let setLoginEnabled: (Bool) throws -> Void
+    private let interfaceTheme: () -> InterfaceTheme
+    private let setInterfaceTheme: (InterfaceTheme) -> Void
     private let todayValue = DashboardViewController.valueLabel()
     private let weekValue = DashboardViewController.valueLabel()
-    private let statusLabel = DashboardViewController.textLabel("", size: 13, color: .secondaryLabelColor)
     private let chartView = WeeklySwitchChartView()
     private let topAppsStack = NSStackView()
     private let reopenSwitch = NSSwitch()
     private let loginSwitch = NSSwitch()
     private let loginDescription = DashboardViewController.textLabel("", size: 12, color: .secondaryLabelColor)
+    private let themePopUp = NSPopUpButton()
 
     init(statistics: SwitchStatisticsStore, isReopenEnabled: @escaping () -> Bool,
          setReopenEnabled: @escaping (Bool) -> Void, loginStatus: @escaping () -> SMAppService.Status,
-         setLoginEnabled: @escaping (Bool) throws -> Void) {
+         setLoginEnabled: @escaping (Bool) throws -> Void, interfaceTheme: @escaping () -> InterfaceTheme,
+         setInterfaceTheme: @escaping (InterfaceTheme) -> Void) {
         self.statistics = statistics
         self.isReopenEnabled = isReopenEnabled
         self.setReopenEnabled = setReopenEnabled
         self.loginStatus = loginStatus
         self.setLoginEnabled = setLoginEnabled
+        self.interfaceTheme = interfaceTheme
+        self.setInterfaceTheme = setInterfaceTheme
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -103,8 +131,8 @@ private final class DashboardViewController: NSViewController {
         updateTopApps(snapshot.topApps)
         let enabled = isReopenEnabled()
         reopenSwitch.state = enabled ? .on : .off
-        statusLabel.stringValue = enabled ? "自动呼起已启用" : "自动呼起已暂停，统计仍会继续"
         updateLoginStatus(loginStatus())
+        themePopUp.selectItem(at: InterfaceTheme.allCases.firstIndex(of: interfaceTheme()) ?? 0)
     }
 
     private func buildLayout(in background: NSView) {
@@ -133,9 +161,9 @@ private final class DashboardViewController: NSViewController {
             metrics.widthAnchor.constraint(equalTo: content.widthAnchor),
             metrics.heightAnchor.constraint(equalToConstant: 92),
             details.widthAnchor.constraint(equalTo: content.widthAnchor),
-            details.heightAnchor.constraint(equalToConstant: 250),
+            details.heightAnchor.constraint(equalToConstant: 230),
             settings.widthAnchor.constraint(equalTo: content.widthAnchor),
-            settings.heightAnchor.constraint(equalToConstant: 132)
+            settings.heightAnchor.constraint(equalToConstant: 176)
         ])
     }
 
@@ -144,8 +172,8 @@ private final class DashboardViewController: NSViewController {
         icon.imageScaling = .scaleProportionallyUpOrDown
         NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 54), icon.heightAnchor.constraint(equalToConstant: 54)])
         let title = Self.textLabel("Cmd Tab Pro", size: 26, weight: .semibold)
-        let subtitle = Self.textLabel("保留原生 Cmd+Tab，自动呼起仍在运行但没有窗口的应用", size: 13, color: .secondaryLabelColor)
-        let labels = NSStackView(views: [title, subtitle, statusLabel])
+        let subtitle = Self.textLabel("增强系统原生 Cmd+Tab 功能，让你切换应用更加丝滑！", size: 13, color: .secondaryLabelColor)
+        let labels = NSStackView(views: [title, subtitle])
         labels.orientation = .vertical
         labels.alignment = .leading
         labels.spacing = 3
@@ -179,11 +207,17 @@ private final class DashboardViewController: NSViewController {
         topAppsStack.alignment = .leading
         topAppsStack.spacing = 6
         topAppsStack.widthAnchor.constraint(equalTo: appContent.widthAnchor).isActive = true
-        let row = NSStackView(views: [card(chartContent), card(appContent)])
+        let chartCard = card(chartContent)
+        let appCard = card(appContent)
+        let row = NSStackView(views: [chartCard, appCard])
         row.orientation = .horizontal
-        row.alignment = .height
+        row.alignment = .top
         row.distribution = .fillEqually
         row.spacing = 14
+        NSLayoutConstraint.activate([
+            chartCard.heightAnchor.constraint(equalTo: row.heightAnchor),
+            appCard.heightAnchor.constraint(equalTo: row.heightAnchor)
+        ])
         return row
     }
 
@@ -192,16 +226,22 @@ private final class DashboardViewController: NSViewController {
         reopenSwitch.action = #selector(toggleReopen)
         loginSwitch.target = self
         loginSwitch.action = #selector(toggleLogin)
+        themePopUp.addItems(withTitles: InterfaceTheme.allCases.map(\.title))
+        themePopUp.target = self
+        themePopUp.action = #selector(changeTheme)
+        themePopUp.widthAnchor.constraint(equalToConstant: 112).isActive = true
         let reopenRow = settingRow(
-            title: "自动呼起窗口", description: "切换到没有窗口的应用时请求它重新创建窗口", control: reopenSwitch
+            title: "自动唤回窗口", description: "切换到无窗口应用时，自动重新打开窗口", control: reopenSwitch
         )
         let loginRow = settingRow(title: "登录时启动", descriptionLabel: loginDescription, control: loginSwitch)
-        let stack = NSStackView(views: [Self.sectionTitle("设置"), reopenRow, loginRow])
+        let themeRow = settingRow(title: "界面主题", description: "选择跟随系统、浅色或深色外观", control: themePopUp)
+        let stack = NSStackView(views: [Self.sectionTitle("设置"), reopenRow, loginRow, themeRow])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 9
         reopenRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         loginRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        themeRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         return card(stack)
     }
 
@@ -319,6 +359,12 @@ private final class DashboardViewController: NSViewController {
         refresh()
     }
 
+    @objc private func changeTheme() {
+        guard InterfaceTheme.allCases.indices.contains(themePopUp.indexOfSelectedItem) else { return }
+        setInterfaceTheme(InterfaceTheme.allCases[themePopUp.indexOfSelectedItem])
+        refresh()
+    }
+
     private static func valueLabel() -> NSTextField {
         textLabel("0", size: 30, weight: .semibold)
     }
@@ -345,7 +391,7 @@ private final class WeeklySwitchChartView: NSView {
     }()
     var days = [DailySwitchSummary]() { didSet { needsDisplay = true } }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 300, height: 185) }
+    override var intrinsicContentSize: NSSize { NSSize(width: 300, height: 165) }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)

@@ -21,9 +21,13 @@
 - 今日应用切换次数
 - 近 7 天切换总数和趋势
 - 近 7 天切换最多的 5 个 App
-- 自动呼起窗口和登录时启动开关
+- 自动唤回窗口、登录时启动和界面主题设置
 
 统计记录普通 GUI 应用成为前台应用的次数，来源可能是 Cmd+Tab、Dock、Spotlight 或点击窗口。当前无权限方案无法区分具体切换来源。
+
+界面主题支持跟随系统、浅色和深色，默认跟随系统并记住用户选择。
+
+主窗口固定为 760 × 720，当前版本不支持拖拽缩放或绿色按钮放大。
 
 ## 验证
 
@@ -54,7 +58,7 @@
 
 先在菜单栏关闭“登录时启动”并退出，再删除：
 
-    /Applications/Cmd Tab Pro.app
+    /Applications/CmdTabPro.app
 
 ## 打包与下载
 
@@ -64,7 +68,7 @@
 
 产物位于 `.build/release/`，仅支持 Apple Silicon Mac。ZIP 使用 ad-hoc 签名且未经过 Apple notarization，因此从网络下载后首次打开可能被 Gatekeeper 阻止。用户可以在“系统设置 → 隐私与安全性”中选择仍要打开，然后再次确认。
 
-GitHub Releases 可以直接托管这个 ZIP，其他人下载、解压并将 `Cmd Tab Pro.app` 移入 `/Applications` 后即可使用。发布时应同时上传 `.sha256` 文件，并在发布说明中写明系统版本、芯片要求和首次打开方式。
+GitHub Releases 可以直接托管这个 ZIP，其他人下载、解压并将 `CmdTabPro.app` 移入 `/Applications` 后即可使用。发布时应同时上传 `.sha256` 文件，并在发布说明中写明系统版本、芯片要求和首次打开方式。
 
 ## 开源准备
 

@@ -4,7 +4,7 @@ set -euo pipefail
 
 projectDir="$(cd "$(dirname "$0")/.." && pwd)"
 releaseDir="$projectDir/.build/release"
-app="$projectDir/.build/Cmd Tab Pro.app"
+app="$projectDir/.build/CmdTabPro.app"
 executable="$app/Contents/MacOS/CmdTabPro"
 version="$(plutil -extract CFBundleShortVersionString raw "$projectDir/Resources/Info.plist")"
 archive="$releaseDir/Cmd-Tab-Pro-v$version-macOS-26-arm64-adhoc.zip"

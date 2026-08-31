@@ -4,16 +4,18 @@ set -euo pipefail
 
 projectDir="$(cd "$(dirname "$0")/.." && pwd)"
 buildDir="$projectDir/.build"
-stagedApp="$buildDir/Cmd Tab Pro.app"
-installedApp="/Applications/Cmd Tab Pro.app"
-previousApp="$buildDir/Cmd Tab Pro.previous.app"
+stagedApp="$buildDir/CmdTabPro.app"
+installedApp="/Applications/CmdTabPro.app"
+previousApp="$buildDir/CmdTabPro.previous.app"
+spacedApp="/Applications/Cmd Tab Pro.app"
+spacedBackup="$buildDir/Cmd Tab Pro.legacy.app"
 legacyApp="/Applications/CmdTabReopener.app"
 legacyBackup="$buildDir/CmdTabReopener.legacy.app"
 executable="$stagedApp/Contents/MacOS/CmdTabPro"
 iconSource="$projectDir/Assets/AppIcon.png"
 iconset="$buildDir/AppIcon.iconset"
 
-rm -rf "$stagedApp" "$previousApp" "$legacyBackup" "$iconset"
+rm -rf "$stagedApp" "$previousApp" "$spacedBackup" "$legacyBackup" "$iconset"
 mkdir -p "$stagedApp/Contents/MacOS" "$stagedApp/Contents/Resources" "$iconset"
 cp "$projectDir/Resources/Info.plist" "$stagedApp/Contents/Info.plist"
 plutil -lint "$stagedApp/Contents/Info.plist"
@@ -43,10 +45,12 @@ codesign --verify --deep --strict "$stagedApp"
 "$executable" --terminate-running
 for _ in {1..30}; do
   ! pgrep -f "$installedApp/Contents/MacOS/CmdTabPro" >/dev/null && \
+    ! pgrep -f "$spacedApp/Contents/MacOS/CmdTabPro" >/dev/null && \
     ! pgrep -f "$legacyApp/Contents/MacOS/CmdTabReopener" >/dev/null && break
   sleep 0.1
 done
 if pgrep -f "$installedApp/Contents/MacOS/CmdTabPro" >/dev/null || \
+   pgrep -f "$spacedApp/Contents/MacOS/CmdTabPro" >/dev/null || \
    pgrep -f "$legacyApp/Contents/MacOS/CmdTabReopener" >/dev/null; then
   echo "Existing Cmd Tab Pro or CmdTabReopener did not quit; installation stopped." >&2
   exit 1
@@ -59,6 +63,9 @@ if ! ditto "$stagedApp" "$installedApp"; then
   exit 1
 fi
 rm -rf "$previousApp"
+if [ -e "$spacedApp" ]; then
+  mv "$spacedApp" "$spacedBackup"
+fi
 if [ -e "$legacyApp" ]; then
   mv "$legacyApp" "$legacyBackup"
 fi

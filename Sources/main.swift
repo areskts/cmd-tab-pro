@@ -124,7 +124,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         loginStatus: { SMAppService.mainApp.status },
         setLoginEnabled: { [weak self] enabled in try self?.setLoginEnabled(enabled) },
         interfaceTheme: { [weak self] in self?.interfaceTheme() ?? .system },
-        setInterfaceTheme: { [weak self] theme in self?.setInterfaceTheme(theme) }
+        setInterfaceTheme: { [weak self] theme in self?.setInterfaceTheme(theme) },
+        menuBarIconVisible: { [weak self] in self?.menuBarIconVisible() ?? true },
+        setMenuBarIconVisible: { [weak self] visible in self?.setMenuBarIconVisible(visible) }
     )
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let menu = NSMenu()
@@ -138,6 +140,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         NSApp.setActivationPolicy(.accessory)
         applyInterfaceTheme(interfaceTheme())
         setupMenu()
+        statusItem.isVisible = menuBarIconVisible()
         controller.start()
         let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool
         logger.info("launch default=\(defaultLaunch ?? true, privacy: .public)")
@@ -208,17 +211,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         alert.addButton(withTitle: "隐藏")
         alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        statusItem.isVisible = false
+        setMenuBarIconVisible(false)
         NSApp.hide(nil)
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        statusItem.isVisible = true
+        statusItem.isVisible = menuBarIconVisible()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         // LSUIElement 的 reopen 行为因启动入口而异，激活与 reopen 两条路径都恢复控制入口。
-        statusItem.isVisible = true
         dashboard.showDashboard()
         return false
     }
@@ -256,6 +258,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
     private func applyInterfaceTheme(_ theme: InterfaceTheme) {
         NSApp.appearance = theme.appearance
+    }
+
+    private func menuBarIconVisible() -> Bool {
+        guard UserDefaults.standard.object(forKey: "menuBarIconVisible") != nil else { return true }
+        return UserDefaults.standard.bool(forKey: "menuBarIconVisible")
+    }
+
+    private func setMenuBarIconVisible(_ visible: Bool) {
+        UserDefaults.standard.set(visible, forKey: "menuBarIconVisible")
+        statusItem.isVisible = visible
+        dashboard.refresh()
     }
 
     private func showError(_ title: String, _ message: String) {

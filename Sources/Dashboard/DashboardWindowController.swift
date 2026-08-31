@@ -30,11 +30,13 @@ final class DashboardWindowController: NSWindowController {
     init(statistics: SwitchStatisticsStore, isReopenEnabled: @escaping () -> Bool,
          setReopenEnabled: @escaping (Bool) -> Void, loginStatus: @escaping () -> SMAppService.Status,
          setLoginEnabled: @escaping (Bool) throws -> Void, interfaceTheme: @escaping () -> InterfaceTheme,
-         setInterfaceTheme: @escaping (InterfaceTheme) -> Void) {
+         setInterfaceTheme: @escaping (InterfaceTheme) -> Void, menuBarIconVisible: @escaping () -> Bool,
+         setMenuBarIconVisible: @escaping (Bool) -> Void) {
         dashboardViewController = DashboardViewController(
             statistics: statistics, isReopenEnabled: isReopenEnabled, setReopenEnabled: setReopenEnabled,
             loginStatus: loginStatus, setLoginEnabled: setLoginEnabled, interfaceTheme: interfaceTheme,
-            setInterfaceTheme: setInterfaceTheme
+            setInterfaceTheme: setInterfaceTheme, menuBarIconVisible: menuBarIconVisible,
+            setMenuBarIconVisible: setMenuBarIconVisible
         )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 720),
@@ -76,6 +78,8 @@ private final class DashboardViewController: NSViewController {
     private let setLoginEnabled: (Bool) throws -> Void
     private let interfaceTheme: () -> InterfaceTheme
     private let setInterfaceTheme: (InterfaceTheme) -> Void
+    private let menuBarIconVisible: () -> Bool
+    private let setMenuBarIconVisible: (Bool) -> Void
     private let todayValue = DashboardViewController.valueLabel()
     private let weekValue = DashboardViewController.valueLabel()
     private let chartView = WeeklySwitchChartView()
@@ -84,11 +88,13 @@ private final class DashboardViewController: NSViewController {
     private let loginSwitch = NSSwitch()
     private let loginDescription = DashboardViewController.textLabel("", size: 12, color: .secondaryLabelColor)
     private let themePopUp = NSPopUpButton()
+    private let menuBarSwitch = NSSwitch()
 
     init(statistics: SwitchStatisticsStore, isReopenEnabled: @escaping () -> Bool,
          setReopenEnabled: @escaping (Bool) -> Void, loginStatus: @escaping () -> SMAppService.Status,
          setLoginEnabled: @escaping (Bool) throws -> Void, interfaceTheme: @escaping () -> InterfaceTheme,
-         setInterfaceTheme: @escaping (InterfaceTheme) -> Void) {
+         setInterfaceTheme: @escaping (InterfaceTheme) -> Void, menuBarIconVisible: @escaping () -> Bool,
+         setMenuBarIconVisible: @escaping (Bool) -> Void) {
         self.statistics = statistics
         self.isReopenEnabled = isReopenEnabled
         self.setReopenEnabled = setReopenEnabled
@@ -96,6 +102,8 @@ private final class DashboardViewController: NSViewController {
         self.setLoginEnabled = setLoginEnabled
         self.interfaceTheme = interfaceTheme
         self.setInterfaceTheme = setInterfaceTheme
+        self.menuBarIconVisible = menuBarIconVisible
+        self.setMenuBarIconVisible = setMenuBarIconVisible
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -133,6 +141,7 @@ private final class DashboardViewController: NSViewController {
         reopenSwitch.state = enabled ? .on : .off
         updateLoginStatus(loginStatus())
         themePopUp.selectItem(at: InterfaceTheme.allCases.firstIndex(of: interfaceTheme()) ?? 0)
+        menuBarSwitch.state = menuBarIconVisible() ? .on : .off
     }
 
     private func buildLayout(in background: NSView) {
@@ -163,7 +172,7 @@ private final class DashboardViewController: NSViewController {
             details.widthAnchor.constraint(equalTo: content.widthAnchor),
             details.heightAnchor.constraint(equalToConstant: 230),
             settings.widthAnchor.constraint(equalTo: content.widthAnchor),
-            settings.heightAnchor.constraint(equalToConstant: 176)
+            settings.heightAnchor.constraint(equalToConstant: 218)
         ])
     }
 
@@ -230,18 +239,22 @@ private final class DashboardViewController: NSViewController {
         themePopUp.target = self
         themePopUp.action = #selector(changeTheme)
         themePopUp.widthAnchor.constraint(equalToConstant: 112).isActive = true
+        menuBarSwitch.target = self
+        menuBarSwitch.action = #selector(toggleMenuBarIcon)
         let reopenRow = settingRow(
             title: "自动唤回窗口", description: "切换到无窗口应用时，自动重新打开窗口", control: reopenSwitch
         )
         let loginRow = settingRow(title: "登录时启动", descriptionLabel: loginDescription, control: loginSwitch)
         let themeRow = settingRow(title: "界面主题", description: "选择跟随系统、浅色或深色外观", control: themePopUp)
-        let stack = NSStackView(views: [Self.sectionTitle("设置"), reopenRow, loginRow, themeRow])
+        let menuBarRow = settingRow(title: "显示菜单栏图标", description: "关闭后仍可重新打开 App 进入主页面", control: menuBarSwitch)
+        let stack = NSStackView(views: [Self.sectionTitle("设置"), reopenRow, loginRow, themeRow, menuBarRow])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 9
         reopenRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         loginRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         themeRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        menuBarRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         return card(stack)
     }
 
@@ -362,6 +375,11 @@ private final class DashboardViewController: NSViewController {
     @objc private func changeTheme() {
         guard InterfaceTheme.allCases.indices.contains(themePopUp.indexOfSelectedItem) else { return }
         setInterfaceTheme(InterfaceTheme.allCases[themePopUp.indexOfSelectedItem])
+        refresh()
+    }
+
+    @objc private func toggleMenuBarIcon() {
+        setMenuBarIconVisible(menuBarSwitch.state == .on)
         refresh()
     }
 

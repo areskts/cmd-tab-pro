@@ -12,17 +12,13 @@ legacyBackup="$buildDir/CmdTabReopener.legacy.app"
 executable="$stagedApp/Contents/MacOS/CmdTabPro"
 iconSource="$projectDir/Assets/AppIcon.png"
 iconset="$buildDir/AppIcon.iconset"
-armExecutable="$buildDir/CmdTabPro-arm64"
-intelExecutable="$buildDir/CmdTabPro-x86_64"
 
 rm -rf "$stagedApp" "$previousApp" "$legacyBackup" "$iconset"
 mkdir -p "$stagedApp/Contents/MacOS" "$stagedApp/Contents/Resources" "$iconset"
 cp "$projectDir/Resources/Info.plist" "$stagedApp/Contents/Info.plist"
 plutil -lint "$stagedApp/Contents/Info.plist"
 
-xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework AppKit -framework ServiceManagement "$projectDir/Sources/main.swift" -o "$armExecutable"
-xcrun swiftc -swift-version 5 -O -target x86_64-apple-macos26.0 -framework AppKit -framework ServiceManagement "$projectDir/Sources/main.swift" -o "$intelExecutable"
-lipo -create "$armExecutable" "$intelExecutable" -output "$executable"
+xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework AppKit -framework ServiceManagement "$projectDir/Sources/main.swift" -o "$executable"
 
 sips -z 16 16 "$iconSource" --out "$iconset/icon_16x16.png" >/dev/null
 sips -z 32 32 "$iconSource" --out "$iconset/icon_16x16@2x.png" >/dev/null

@@ -104,16 +104,15 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 - 最低系统版本 macOS 26
 - 使用 xcrun swiftc 编译，不创建 Xcode 工程或 Swift Package
 - 本地安装使用 ad-hoc 签名并启用 hardened runtime
-- 同时构建 arm64 与 x86_64，输出 universal binary
+- 仅构建 Apple Silicon arm64
 - 固定 bundle ID：com.wujunjie.cmd-tab-pro
 
-正式文件共 5 个：
+核心实现文件：
 
 1. Sources/main.swift
 2. Resources/Info.plist
 3. scripts/install.sh
-4. README.md
-5. DESIGN.md
+4. scripts/package-release.sh
 
 ## 9. 安装
 
@@ -129,7 +128,7 @@ scripts/install.sh 负责：
 
 登录时启动使用 SMAppService.mainApp，由用户在菜单栏开关。
 
-选定图标为方案 3。安装时从 Assets/AppIcon.png 生成 16 到 1024 像素的完整 iconset，并打包为 AppIcon.icns。Apple 在 macOS 26 推荐 Icon Composer 的多层 Liquid Glass 图标，但本机尚未安装 Icon Composer；公开发布前可在不改应用逻辑的情况下，把同一视觉拆层升级为 .icon 资源。
+选定图标为方案 1 `icon-option-1-window-switch`。安装时从 Assets/AppIcon.png 生成 16 到 1024 像素的完整 iconset，并打包为 AppIcon.icns。Apple 在 macOS 26 推荐 Icon Composer 的多层 Liquid Glass 图标，但本机尚未安装 Icon Composer；以后可在不改应用逻辑的情况下，把同一视觉拆层升级为 .icon 资源。
 
 ## 10. 验证
 
@@ -174,7 +173,7 @@ scripts/install.sh 负责：
 
 仓库保持无第三方依赖，安装脚本、设计说明和行为边界全部随源码提供。公开发布前必须选择并添加 LICENSE；推荐 MIT，但许可证属于项目所有者决策，不在本次改名中代选。
 
-公开发布预编译二进制时，需要 Developer ID Application 签名和 notarization。本地 ad-hoc 签名版本只用于个人安装，不作为公开发布包。
+公开预编译包仅提供 macOS 26 arm64 ZIP，使用 ad-hoc 签名并接受 Gatekeeper 首次阻止，由用户在“隐私与安全性”中手动允许。发布包同时提供 SHA-256 校验文件。若以后要求无提示安装，再改用 Developer ID Application 签名和 notarization。
 
 ## 14. 官方 API 依据
 

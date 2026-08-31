@@ -8,7 +8,7 @@
 
     bash scripts/install.sh
 
-安装脚本会为 macOS 26 构建 arm64 + x86_64 通用二进制、生成 AppIcon.icns、启用 hardened runtime、签名、复制到 /Applications 并启动，不需要辅助功能权限。
+安装脚本会为 macOS 26 构建 Apple Silicon arm64 二进制、生成 AppIcon.icns、启用 hardened runtime、进行 ad-hoc 签名、复制到 /Applications 并启动，不需要辅助功能权限。
 
 ## 使用
 
@@ -39,8 +39,18 @@
 
     /Applications/Cmd Tab Pro.app
 
+## 打包与下载
+
+生成可上传到 GitHub Releases 的 ZIP 和 SHA-256 校验文件：
+
+    bash scripts/package-release.sh
+
+产物位于 `.build/release/`，仅支持 Apple Silicon Mac。ZIP 使用 ad-hoc 签名且未经过 Apple notarization，因此从网络下载后首次打开可能被 Gatekeeper 阻止。用户可以在“系统设置 → 隐私与安全性”中选择仍要打开，然后再次确认。
+
+GitHub Releases 可以直接托管这个 ZIP，其他人下载、解压并将 `Cmd Tab Pro.app` 移入 `/Applications` 后即可使用。发布时应同时上传 `.sha256` 文件，并在发布说明中写明系统版本、芯片要求和首次打开方式。
+
 ## 开源准备
 
 项目不依赖第三方库，构建和安装流程都在仓库内。发布到公开仓库前还需要选择许可证；推荐 MIT，但不会在未经确认的情况下自动添加。
 
-当前部署目标为 macOS 26.0。公开发布预编译版本时仍需要 Developer ID 签名和 Apple notarization；本地安装脚本使用 ad-hoc 签名，仅用于个人构建。
+当前部署目标为 macOS 26.0，仅支持 Apple Silicon arm64。当前发布包采用 ad-hoc 签名，接受用户手动信任的 Gatekeeper 提示；如果以后需要双击即开，再增加 Developer ID 签名和 Apple notarization。

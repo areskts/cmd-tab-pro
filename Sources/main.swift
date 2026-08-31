@@ -207,7 +207,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "隐藏菜单栏图标？"
-        alert.informativeText = "隐藏后，重新打开 Cmd Tab Pro 即可恢复图标。"
+        alert.informativeText = "隐藏后，可重新打开 CmdTabPro.app 进入主页面并再次开启。"
         alert.addButton(withTitle: "隐藏")
         alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }

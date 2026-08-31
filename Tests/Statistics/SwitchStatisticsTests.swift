@@ -3,7 +3,7 @@ import Foundation
 @main
 private enum SwitchStatisticsTests {
     static func main() {
-        let suite = "com.ares.cmd.tab.tests.(UUID().uuidString)"
+        let suite = "com.ares.cmd.tab.tests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else { exit(1) }
         defer { defaults.removePersistentDomain(forName: suite) }
         var calendar = Calendar(identifier: .gregorian)

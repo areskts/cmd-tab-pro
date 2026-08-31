@@ -10,6 +10,8 @@
 
 安装脚本会为 macOS 26 构建 Apple Silicon arm64 二进制、生成 AppIcon.icns、启用 hardened runtime、进行 ad-hoc 签名、复制到 /Applications 并启动，不需要辅助功能权限。
 
+从 v0.1.0 手动升级时，请先退出并删除 `/Applications/Cmd Tab Pro.app`，再将新版 `CmdTabPro.app` 移入 `/Applications`。新版 Bundle ID 已调整为 `com.ares.cmd.tab`，原来启用过“登录时启动”的用户需要重新开启一次。
+
 ## 使用
 
 正常打开工具会显示主页面并常驻菜单栏。关闭主页面不会退出工具，再次打开 App 或从菜单选择“打开 Cmd Tab Pro…”即可恢复页面。

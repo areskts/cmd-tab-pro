@@ -12,6 +12,10 @@ private func shouldAttemptReopen(enabled: Bool, regular: Bool, terminated: Bool,
     enabled && regular && !terminated && !ownProcess && frontmost && !coolingDown
 }
 
+private func shouldShowDashboard(defaultLaunch: Bool?) -> Bool {
+    defaultLaunch ?? true
+}
+
 private func runSelfTest() {
     func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         guard condition() else {
@@ -33,15 +37,26 @@ private func runSelfTest() {
                                 terminated: ready.terminated, ownProcess: ready.ownProcess,
                                 frontmost: ready.frontmost, coolingDown: true),
            "cooldown must prevent duplicate reopen")
+    expect(shouldShowDashboard(defaultLaunch: true), "normal launch should show dashboard")
+    expect(!shouldShowDashboard(defaultLaunch: false), "background launch must stay quiet")
     print("self-test passed")
 }
 
 private final class ReopenController {
     private let workspace = NSWorkspace.shared
     private let ownPid = ProcessInfo.processInfo.processIdentifier
+    private let statistics: SwitchStatisticsStore
+    private let defaults: UserDefaults
     private var observer: NSObjectProtocol?
     private var cooldownUntil = [pid_t: TimeInterval]()
-    var isEnabled = true
+    private var countedUntil = [pid_t: TimeInterval]()
+    private(set) var isEnabled: Bool
+
+    init(statistics: SwitchStatisticsStore, defaults: UserDefaults = .standard) {
+        self.statistics = statistics
+        self.defaults = defaults
+        isEnabled = defaults.object(forKey: "reopenEnabled") as? Bool ?? true
+    }
 
     func start() {
         observer = workspace.notificationCenter.addObserver(
@@ -53,11 +68,27 @@ private final class ReopenController {
     }
 
     private func applicationActivated(_ app: NSRunningApplication) {
-        guard isEnabled, app.activationPolicy == .regular,
-              !app.isTerminated, app.processIdentifier != ownPid else { return }
+        guard app.activationPolicy == .regular, !app.isTerminated, app.processIdentifier != ownPid else { return }
+        recordSwitch(app)
+        guard isEnabled else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150)) { [weak self] in
             self?.reopenIfNeeded(app)
         }
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        isEnabled = enabled
+        defaults.set(enabled, forKey: "reopenEnabled")
+    }
+
+    private func recordSwitch(_ app: NSRunningApplication) {
+        let now = ProcessInfo.processInfo.systemUptime
+        countedUntil = countedUntil.filter { $0.value > now }
+        let pid = app.processIdentifier
+        guard (countedUntil[pid] ?? 0) <= now else { return }
+        countedUntil[pid] = now + 0.5
+        let name = app.localizedName ?? "未知应用"
+        statistics.record(bundleIdentifier: app.bundleIdentifier ?? "name:\(name)", displayName: name)
     }
 
     private func reopenIfNeeded(_ app: NSRunningApplication) {
@@ -84,11 +115,20 @@ private final class ReopenController {
 }
 
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private let controller = ReopenController()
+    private let statistics = SwitchStatisticsStore()
+    private lazy var controller = ReopenController(statistics: statistics)
+    private lazy var dashboard = DashboardWindowController(
+        statistics: statistics,
+        isReopenEnabled: { [weak self] in self?.controller.isEnabled ?? false },
+        setReopenEnabled: { [weak self] enabled in self?.setReopenEnabled(enabled) },
+        loginStatus: { SMAppService.mainApp.status },
+        setLoginEnabled: { [weak self] enabled in try self?.setLoginEnabled(enabled) }
+    )
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let menu = NSMenu()
     private let statusMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let enabledMenuItem = NSMenuItem(title: "启用", action: #selector(toggleEnabled), keyEquivalent: "")
+    private let openMenuItem = NSMenuItem(title: "打开 Cmd Tab Pro…", action: #selector(openDashboard), keyEquivalent: ",")
+    private let enabledMenuItem = NSMenuItem(title: "自动呼起窗口", action: #selector(toggleEnabled), keyEquivalent: "")
     private let loginMenuItem = NSMenuItem(title: "登录时启动", action: #selector(toggleLoginItem), keyEquivalent: "")
     private let hideMenuItem = NSMenuItem(title: "隐藏菜单栏图标…", action: #selector(hideStatusItem), keyEquivalent: "")
 
@@ -96,17 +136,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         NSApp.setActivationPolicy(.accessory)
         setupMenu()
         controller.start()
+        let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool
+        logger.info("launch default=\(defaultLaunch ?? true, privacy: .public)")
+        if shouldShowDashboard(defaultLaunch: defaultLaunch) { dashboard.showDashboard() }
     }
 
     private func setupMenu() {
         let image = NSImage(systemSymbolName: "rectangle.2.swap", accessibilityDescription: "Cmd Tab Pro")
         statusItem.button?.image = image?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
         statusItem.button?.toolTip = "Cmd Tab Pro"
+        openMenuItem.target = self
         enabledMenuItem.target = self
         loginMenuItem.target = self
         hideMenuItem.target = self
         menu.delegate = self
         menu.addItem(statusMenuItem)
+        menu.addItem(.separator())
+        menu.addItem(openMenuItem)
         menu.addItem(.separator())
         menu.addItem(enabledMenuItem)
         menu.addItem(loginMenuItem)
@@ -123,7 +169,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     private func refreshMenu() {
-        statusMenuItem.title = controller.isEnabled ? "状态：已启用" : "状态：已暂停"
+        statusMenuItem.title = controller.isEnabled ? "自动呼起：已启用" : "自动呼起：已暂停"
         statusMenuItem.image = NSImage(
             systemSymbolName: controller.isEnabled ? "checkmark.circle.fill" : "pause.circle",
             accessibilityDescription: statusMenuItem.title
@@ -136,21 +182,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     @objc private func toggleEnabled() {
-        controller.isEnabled.toggle()
-        refreshMenu()
+        setReopenEnabled(!controller.isEnabled)
     }
 
     @objc private func toggleLoginItem() {
         do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
+            try setLoginEnabled(SMAppService.mainApp.status != .enabled)
         } catch {
             showError("无法修改登录项", error.localizedDescription)
         }
-        refreshMenu()
+    }
+
+    @objc private func openDashboard() {
+        dashboard.showDashboard()
     }
 
     @objc private func hideStatusItem() {
@@ -172,7 +216,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         // LSUIElement 的 reopen 行为因启动入口而异，激活与 reopen 两条路径都恢复控制入口。
         statusItem.isVisible = true
+        dashboard.showDashboard()
         return false
+    }
+
+    private func setReopenEnabled(_ enabled: Bool) {
+        controller.setEnabled(enabled)
+        refreshMenu()
+        dashboard.refresh()
+    }
+
+    private func setLoginEnabled(_ enabled: Bool) throws {
+        let service = SMAppService.mainApp
+        if enabled {
+            if service.status == .requiresApproval {
+                SMAppService.openSystemSettingsLoginItems()
+            } else if service.status != .enabled {
+                try service.register()
+            }
+        } else if service.status == .enabled || service.status == .requiresApproval {
+            try service.unregister()
+        }
+        refreshMenu()
+        dashboard.refresh()
     }
 
     private func showError(_ title: String, _ message: String) {

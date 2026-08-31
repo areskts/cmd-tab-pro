@@ -20,6 +20,8 @@
 6. 规范应用已有窗口时只前置，没有窗口时创建窗口。
 7. 同一 PID 0.5 秒内只处理一次，避免 reopen 引发激活循环，同时允许快速关闭后切回。
 8. 支持暂停、退出和登录时启动。
+9. 展示近 7 天切换总量、每日趋势和切换最多的 5 个 App。
+10. 统计只保存在本机，并自动淘汰 7 天前的数据。
 
 ## 3. 运行链路
 
@@ -45,6 +47,8 @@
           +---- 没有窗口：创建默认窗口并前置
 
 工具也会在 Dock、Spotlight 或其他方式激活应用时执行相同行为。NSWorkspace 的激活通知不提供输入来源，为了只区分 Cmd+Tab 而增加全局键盘监听不值得。
+
+同一个激活通知也用于本地统计。统计记录目标 App 的 Bundle ID、显示名称和次数，不记录窗口标题或内容。reopen 可能再次触发激活通知，因此同一 PID 在 0.5 秒内只统计一次。
 
 ## 4. 为什么不检查窗口数量
 
@@ -77,7 +81,11 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 
 ## 7. 用户体验
 
-应用是 LSUIElement 菜单栏工具，不显示 Dock 图标和主窗口。
+应用是 LSUIElement 菜单栏工具，不显示 Dock 图标，主页面按需显示。
+
+正常手动启动或再次打开 App 时展示主页面；登录时自动启动保持菜单栏常驻，不主动弹出窗口。关闭主页面不会退出应用。
+
+主页面使用 AppKit 原生窗口、NSVisualEffectView、NSSwitch、系统字体和动态颜色，包含今日计数、7 天合计、7 天柱状图、Top 5 App 和两项设置。
 
 菜单仅提供：
 
@@ -85,6 +93,7 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 - 启用或暂停
 - 登录时启动
 - 隐藏菜单栏图标，重新打开应用可恢复
+- 打开主页面
 - 退出
 
 安装脚本完成后应用直接启动，不弹权限请求。
@@ -111,9 +120,11 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 核心实现文件：
 
 1. Sources/main.swift
-2. Resources/Info.plist
-3. scripts/install.sh
-4. scripts/package-release.sh
+2. Sources/Statistics/SwitchStatistics.swift
+3. Sources/Dashboard/DashboardWindowController.swift
+4. Resources/Info.plist
+5. scripts/install.sh
+6. scripts/package-release.sh
 
 ## 9. 安装
 
@@ -156,11 +167,20 @@ scripts/install.sh 负责：
 
 正对照通过、负对照失败，证明行为来自本工具。
 
+### 统计测试
+
+- 始终返回今天及前 6 天。
+- 第 8 天数据被自动删除。
+- 每日总量与分 App 数量一致。
+- Top 5 按近 7 天总次数排序。
+
 ## 11. 风险与边界
 
 最脆弱的假设是目标应用正确实现 reopen。规范 AppKit 应用会根据 hasVisibleWindows 决定是否创建窗口；部分跨平台应用可能忽略 reopen，或在已有窗口时错误地创建新窗口。
 
 第一版不增加应用特例。只有个人实际使用中确认某个高频应用存在副作用时，才增加一个很小的 bundle ID 排除列表。
+
+统计无法区分 Cmd+Tab、Dock、Spotlight 和鼠标点击，只能准确识别成为前台的目标 App。页面文案明确使用“应用切换”，不把数据描述为“Cmd+Tab 次数”。
 
 旧 LaunchServices API 已废弃，未来 macOS 可能移除或改变行为。每次系统大版本升级后应重新运行真实夹具验收。
 

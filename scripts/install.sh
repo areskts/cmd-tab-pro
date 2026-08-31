@@ -18,7 +18,11 @@ mkdir -p "$stagedApp/Contents/MacOS" "$stagedApp/Contents/Resources" "$iconset"
 cp "$projectDir/Resources/Info.plist" "$stagedApp/Contents/Info.plist"
 plutil -lint "$stagedApp/Contents/Info.plist"
 
-xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework AppKit -framework ServiceManagement "$projectDir/Sources/main.swift" -o "$executable"
+xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework AppKit -framework ServiceManagement \
+  "$projectDir/Sources/Statistics/SwitchStatistics.swift" \
+  "$projectDir/Sources/Dashboard/DashboardWindowController.swift" \
+  "$projectDir/Sources/main.swift" \
+  -o "$executable"
 
 sips -z 16 16 "$iconSource" --out "$iconset/icon_16x16.png" >/dev/null
 sips -z 32 32 "$iconSource" --out "$iconset/icon_16x16@2x.png" >/dev/null

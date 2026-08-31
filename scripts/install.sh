@@ -33,7 +33,7 @@ sips -z 1024 1024 "$iconSource" --out "$iconset/icon_512x512@2x.png" >/dev/null
 iconutil -c icns "$iconset" -o "$stagedApp/Contents/Resources/AppIcon.icns"
 
 "$executable" --self-test
-codesign --force --deep --options runtime --sign - --identifier com.wujunjie.cmd-tab-pro "$stagedApp"
+codesign --force --deep --options runtime --sign - --identifier com.ares.cmd.tab "$stagedApp"
 codesign --verify --deep --strict "$stagedApp"
 
 "$executable" --terminate-running

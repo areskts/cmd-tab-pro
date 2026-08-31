@@ -14,7 +14,7 @@
 
 工具启动后显示在菜单栏，无需配置。正常使用系统原生 Cmd+Tab 即可。
 
-菜单栏可以暂停功能、设置登录时启动或退出。
+菜单栏可以暂停功能、设置登录时启动、隐藏图标或退出。隐藏图标后，重新打开 Cmd Tab Pro 即可恢复。
 
 ## 验证
 
@@ -54,3 +54,5 @@ GitHub Releases 可以直接托管这个 ZIP，其他人下载、解压并将 `C
 项目不依赖第三方库，构建和安装流程都在仓库内。发布到公开仓库前还需要选择许可证；推荐 MIT，但不会在未经确认的情况下自动添加。
 
 当前部署目标为 macOS 26.0，仅支持 Apple Silicon arm64。当前发布包采用 ad-hoc 签名，接受用户手动信任的 Gatekeeper 提示；如果以后需要双击即开，再增加 Developer ID 签名和 Apple notarization。
+
+Bundle ID：`com.ares.cmd.tab`。

@@ -21,7 +21,7 @@ cp "$testDir/Info.plist" "$fixtureApp/Contents/Info.plist"
 codesign --force --deep --sign - "$fixtureApp"
 xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework AppKit "$testDir/Activate.swift" -o "$activateExecutable"
 
-"$activateExecutable" com.wujunjie.cmd-tab-pro.fixture --terminate 2>/dev/null || true
+"$activateExecutable" com.ares.cmd.tab.fixture --terminate 2>/dev/null || true
 open -n "$fixtureApp"
 for _ in {1..30}; do
   [ "$(cat "$readyFile" 2>/dev/null || true)" = "ready" ] && break
@@ -48,14 +48,14 @@ done
 [ "$(cat "$stateFile" 2>/dev/null || true)" = "closed" ]
 
 "$activateExecutable" com.apple.finder
-"$activateExecutable" com.wujunjie.cmd-tab-pro.fixture
+"$activateExecutable" com.ares.cmd.tab.fixture
 for _ in {1..40}; do
   [ "$(cat "$stateFile" 2>/dev/null || true)" = "reopened" ] && break
   sleep 0.1
 done
 
 result="$(cat "$stateFile" 2>/dev/null || true)"
-"$activateExecutable" com.wujunjie.cmd-tab-pro.fixture --terminate 2>/dev/null || true
+"$activateExecutable" com.ares.cmd.tab.fixture --terminate 2>/dev/null || true
 if [ "$expectTool" = "1" ]; then
   [ "$result" = "reopened" ]
   echo "acceptance passed: existing window stayed single and windowless activation reopened"

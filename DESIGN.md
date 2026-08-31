@@ -84,6 +84,7 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 - 当前运行状态
 - 启用或暂停
 - 登录时启动
+- 隐藏菜单栏图标，重新打开应用可恢复
 - 退出
 
 安装脚本完成后应用直接启动，不弹权限请求。
@@ -105,7 +106,7 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 - 使用 xcrun swiftc 编译，不创建 Xcode 工程或 Swift Package
 - 本地安装使用 ad-hoc 签名并启用 hardened runtime
 - 仅构建 Apple Silicon arm64
-- 固定 bundle ID：com.wujunjie.cmd-tab-pro
+- 固定 bundle ID：com.ares.cmd.tab
 
 核心实现文件：
 

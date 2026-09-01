@@ -4,8 +4,8 @@ import ServiceManagement
 import os
 
 private let bundleIdentifier = "com.ares.cmd.tab"
-private let managedBundleIdentifiers = [bundleIdentifier, "com.wujunjie.cmd-tab-pro", "com.wujunjie.cmd-tab-reopener"]
 private let logger = Logger(subsystem: bundleIdentifier, category: "reopen")
+private let releasesURL = URL(string: "https://github.com/areskts/cmd-tab-pro/releases/latest")!
 
 private func shouldAttemptReopen(enabled: Bool, regular: Bool, terminated: Bool,
                                  ownProcess: Bool, frontmost: Bool, coolingDown: Bool) -> Bool {
@@ -117,6 +117,7 @@ private final class ReopenController {
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statistics = SwitchStatisticsStore()
     private lazy var controller = ReopenController(statistics: statistics)
+    private lazy var cachedAppIconOption = AppIconOption.current()
     private lazy var dashboard = DashboardWindowController(
         statistics: statistics,
         isReopenEnabled: { [weak self] in self?.controller.isEnabled ?? false },
@@ -126,12 +127,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         interfaceTheme: { [weak self] in self?.interfaceTheme() ?? .system },
         setInterfaceTheme: { [weak self] theme in self?.setInterfaceTheme(theme) },
         menuBarIconVisible: { [weak self] in self?.menuBarIconVisible() ?? true },
-        setMenuBarIconVisible: { [weak self] visible in self?.setMenuBarIconVisible(visible) }
+        setMenuBarIconVisible: { [weak self] visible in self?.setMenuBarIconVisible(visible) },
+        appIconOption: { [weak self] in self?.currentAppIconOption() ?? .option2 },
+        setAppIconOption: { [weak self] option in self?.setAppIconOption(option) },
+        diagnosticText: { [weak self] in self?.diagnosticText() ?? "" },
+        openReleases: { [weak self] in self?.openReleases() }
     )
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let menu = NSMenu()
     private let statusMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let openMenuItem = NSMenuItem(title: "打开 Cmd Tab Pro…", action: #selector(openDashboard), keyEquivalent: ",")
+    private let openMenuItem = NSMenuItem(title: "打开应用", action: #selector(openDashboard), keyEquivalent: ",")
+    private let aboutMenuItem = NSMenuItem(title: "关于 Cmd Tab Pro…", action: #selector(openAbout), keyEquivalent: "")
     private let enabledMenuItem = NSMenuItem(title: "自动唤回窗口", action: #selector(toggleEnabled), keyEquivalent: "")
     private let loginMenuItem = NSMenuItem(title: "登录时启动", action: #selector(toggleLoginItem), keyEquivalent: "")
     private let hideMenuItem = NSMenuItem(title: "隐藏菜单栏图标…", action: #selector(hideStatusItem), keyEquivalent: "")
@@ -139,12 +145,32 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         applyInterfaceTheme(interfaceTheme())
+        setupMainMenu()
         setupMenu()
         statusItem.isVisible = menuBarIconVisible()
         controller.start()
         let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool
         logger.info("launch default=\(defaultLaunch ?? true, privacy: .public)")
         if shouldShowDashboard(defaultLaunch: defaultLaunch) { dashboard.showDashboard() }
+        showPendingIconSwitchError()
+    }
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+        let appMenuItem = NSMenuItem(title: "Cmd Tab Pro", action: nil, keyEquivalent: "")
+        let appMenu = NSMenu(title: "Cmd Tab Pro")
+        let quit = NSMenuItem(title: "退出 Cmd Tab Pro", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quit.target = NSApp
+        appMenu.addItem(quit)
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+        let windowMenuItem = NSMenuItem(title: "窗口", action: nil, keyEquivalent: "")
+        let windowMenu = NSMenu(title: "窗口")
+        windowMenu.addItem(NSMenuItem(title: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        windowMenuItem.submenu = windowMenu
+        mainMenu.addItem(windowMenuItem)
+        NSApp.mainMenu = mainMenu
+        NSApp.windowsMenu = windowMenu
     }
 
     private func setupMenu() {
@@ -152,6 +178,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         statusItem.button?.image = image?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
         statusItem.button?.toolTip = "Cmd Tab Pro"
         openMenuItem.target = self
+        aboutMenuItem.target = self
         enabledMenuItem.target = self
         loginMenuItem.target = self
         hideMenuItem.target = self
@@ -166,6 +193,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
+        menu.addItem(.separator())
+        menu.addItem(aboutMenuItem)
         statusItem.menu = menu
         refreshMenu()
     }
@@ -201,6 +230,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
     @objc private func openDashboard() {
         dashboard.showDashboard()
+    }
+
+    @objc private func openAbout() {
+        dashboard.showAbout()
     }
 
     @objc private func hideStatusItem() {
@@ -271,6 +304,85 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         dashboard.refresh()
     }
 
+    private func currentAppIconOption() -> AppIconOption {
+        cachedAppIconOption
+    }
+
+    private func setAppIconOption(_ option: AppIconOption) {
+        guard let sourceIcon = option.resourceURL else {
+            showError("无法切换应用图标", "图标资源不存在。")
+            return
+        }
+        let destinationIcon = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/AppIcon.icns")
+        let appParent = Bundle.main.bundleURL.deletingLastPathComponent()
+        guard FileManager.default.isWritableFile(atPath: destinationIcon.path),
+              FileManager.default.isWritableFile(atPath: appParent.path) else {
+            showError("无法切换应用图标", "CmdTabPro.app 当前不可写，请确认它位于可写的 Applications 目录。")
+            return
+        }
+        let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/CmdTabProIconSwitcher")
+        let temporaryHelper = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CmdTabProIconSwitcher-\(UUID().uuidString)")
+        do {
+            try FileManager.default.copyItem(at: helper, to: temporaryHelper)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporaryHelper.path)
+            let process = Process()
+            process.executableURL = temporaryHelper
+            process.arguments = [
+                String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath,
+                sourceIcon.path, option.rawValue
+            ]
+            try process.run()
+            NSApp.terminate(nil)
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryHelper)
+            showError("无法切换应用图标", error.localizedDescription)
+        }
+    }
+
+    private func showPendingIconSwitchError() {
+        guard let message = UserDefaults.standard.string(forKey: "appIconSwitchError") else { return }
+        UserDefaults.standard.removeObject(forKey: "appIconSwitchError")
+        DispatchQueue.main.async { [weak self] in self?.showError("应用图标切换失败", message) }
+    }
+
+    private func diagnosticText() -> String {
+        [
+            "Cmd Tab Pro \(versionDescription())",
+            ProcessInfo.processInfo.operatingSystemVersionString,
+            "Architecture: arm64",
+            "Bundle ID: \(bundleIdentifier)",
+            "Window reopen: \(controller.isEnabled ? "enabled" : "paused")",
+            "Launch at login: \(loginStatusDescription(SMAppService.mainApp.status))",
+            "Menu bar icon: \(menuBarIconVisible() ? "visible" : "hidden")",
+            "Interface theme: \(interfaceTheme().rawValue)",
+            "App icon: \(currentAppIconOption().rawValue)"
+        ].joined(separator: "\n")
+    }
+
+    private func versionDescription() -> String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "未知"
+        return "\(version) (\(build))"
+    }
+
+    private func loginStatusDescription(_ status: SMAppService.Status) -> String {
+        switch status {
+        case .enabled: return "enabled"
+        case .requiresApproval: return "requires approval"
+        case .notFound: return "not found"
+        case .notRegistered: return "disabled"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private func openReleases() {
+        guard NSWorkspace.shared.open(releasesURL) else {
+            showError("无法打开下载页面", releasesURL.absoluteString)
+            return
+        }
+    }
+
     private func showError(_ title: String, _ message: String) {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
@@ -286,7 +398,7 @@ if CommandLine.arguments.contains("--self-test") {
 }
 if CommandLine.arguments.contains("--terminate-running") {
     let ownPid = ProcessInfo.processInfo.processIdentifier
-    let running = managedBundleIdentifiers.flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }
+    let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
         .filter { $0.processIdentifier != ownPid }
     let success = running.allSatisfy { $0.terminate() }
     exit(success ? 0 : 1)

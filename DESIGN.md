@@ -1,7 +1,7 @@
 # Cmd Tab Pro 设计方案
 
 - 状态：已实施
-- 日期：2026-08-31
+- 日期：2026-09-01
 - 用途：个人 macOS 工具
 
 ## 1. 目标
@@ -22,6 +22,10 @@
 8. 支持暂停、退出和登录时启动。
 9. 展示近 7 天切换总量、每日趋势和切换最多的 5 个 App。
 10. 统计只保存在本机，并自动淘汰 7 天前的数据。
+11. 用户可以清除全部统计，并复制不包含使用记录的诊断信息。
+12. 用户主动操作时可以打开 GitHub Releases，不进行后台更新检查。
+13. 主页面使用“通用”“统计”“关于”三个原生工具栏页签。
+14. 当前 ad-hoc 分发版本支持在三套内置图标之间切换。
 
 ## 3. 运行链路
 
@@ -77,17 +81,22 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 - 不识别 Space、屏幕和标签页
 - 不显示缩略图或自定义切换面板
 - 不增加应用白名单、黑名单或配置文件
-- 不引入第三方库、网络、遥测和更新系统
+- 不引入第三方库、后台网络、遥测和自动更新系统
 
 ## 7. 用户体验
 
 应用是 LSUIElement 菜单栏工具，不显示 Dock 图标，主页面按需显示。
 
 正常手动启动或再次打开 App 时展示主页面；登录时自动启动保持菜单栏常驻，不主动弹出窗口。关闭主页面不会退出应用。
+原生主菜单注册 Cmd+W 关闭主页面和 Cmd+Q 退出应用；不使用键盘监听。
 
-主页面使用 AppKit 原生窗口、NSVisualEffectView、NSSwitch、NSPopUpButton、系统字体和动态颜色，包含今日计数、7 天合计、7 天柱状图、Top 5 App 和四项设置。
+主页面使用 AppKit 原生窗口、NSTabViewController、NSSwitch、NSPopUpButton、系统字体和动态颜色。页面底色与浅灰功能块分层，分组标题放在功能块外。
 
-主窗口固定为 760 × 720，暂不提供自由缩放，避免小尺寸下统计和设置区域被压缩。
+主窗口内容区固定为 420 × 460，暂不提供自由缩放。开关使用紧凑尺寸，三套图标在同一行显示。
+
+通用页提供自动唤回、开机自启动、界面主题、菜单栏图标和应用图标设置。统计页展示今日计数、7 天合计、7 天柱状图和 Top 5 App。关于页展示版本和 Bundle ID，并提供复制诊断信息、清除统计和检查更新。清除统计必须二次确认；没有统计数据时按钮保持禁用。
+
+诊断信息只包含运行环境和功能状态，不包含 App 名称、切换次数或其他统计记录。检查更新只打开 GitHub Releases。
 
 菜单仅提供：
 
@@ -96,8 +105,9 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 - 登录时启动
 - 界面主题：跟随系统、浅色或深色
 - 显示或隐藏菜单栏图标，重新打开应用可进入主页面恢复
-- 打开主页面
+- 打开应用
 - 退出
+- 关于 Cmd Tab Pro，固定在菜单最底部
 
 安装脚本完成后应用直接启动，不弹权限请求。
 
@@ -124,10 +134,16 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 
 1. Sources/main.swift
 2. Sources/Statistics/SwitchStatistics.swift
-3. Sources/Dashboard/DashboardWindowController.swift
-4. Resources/Info.plist
-5. scripts/install.sh
-6. scripts/package-release.sh
+3. Sources/Appearance/AppIconOption.swift
+4. Sources/Dashboard/DashboardWindowController.swift
+5. Sources/Dashboard/DashboardStyle.swift
+6. Sources/Dashboard/GeneralViewController.swift
+7. Sources/Dashboard/StatisticsViewController.swift
+8. Sources/Dashboard/AboutViewController.swift
+9. Sources/IconSwitcher/main.swift
+10. Resources/Info.plist
+11. scripts/install.sh
+12. scripts/package-release.sh
 
 ## 9. 安装
 
@@ -143,7 +159,13 @@ scripts/install.sh 负责：
 
 登录时启动使用 SMAppService.mainApp，由用户在菜单栏开关。
 
-选定图标为方案 1 `icon-option-1-window-switch`。安装时从 Assets/AppIcon.png 生成 16 到 1024 像素的完整 iconset，并打包为 AppIcon.icns。Apple 在 macOS 26 推荐 Icon Composer 的多层 Liquid Glass 图标，但本机尚未安装 Icon Composer；以后可在不改应用逻辑的情况下，把同一视觉拆层升级为 .icon 资源。
+默认图标为方案 2 `flat-option-2-cmd-tab`。安装脚本把三套 PNG 生成 16 到 1024 像素的完整 iconset，并分别打包为 ICNS。
+
+用户切换图标时，主应用先把 CmdTabProIconSwitcher 复制到临时目录，再退出。辅助程序等待主进程结束，在 Applications 同目录创建完整 App 副本，在副本中替换图标、签名并验证，全部成功后再通过 Foundation 的安全替换 API 更新正式 App。原 App 在替换完成前保持不变，失败时恢复并验证备份，然后重启应用显示错误。
+
+发布脚本使用 build-only 模式并固定选择方案 2，只生成暂存 App、ZIP 和校验文件，不终止、覆盖或启动本机已经安装的应用。
+
+运行时图标切换依赖修改 App bundle 和重新签名，只适用于当前 ad-hoc 分发方式。如果以后改用 Developer ID 和公证，应取消这项运行时能力，避免破坏签名。
 
 ## 10. 验证
 
@@ -176,6 +198,15 @@ scripts/install.sh 负责：
 - 第 8 天数据被自动删除。
 - 每日总量与分 App 数量一致。
 - Top 5 按近 7 天总次数排序。
+- 清除后计数、App 排名和持久化数据全部为空。
+
+### 界面验收
+
+- 主窗口内容区固定为 420 × 460，不显示缩放入口。
+- 三个工具栏页签均可切换，没有文字、数字或按钮裁切。
+- 浅色主题使用白色页面底和浅灰功能块，深色主题保持对应层级。
+- 三套图标在通用页同一行完整显示，选中项有高亮边框。
+- Cmd+W 关闭窗口但保留进程，Cmd+Q 退出应用。
 
 ## 11. 风险与边界
 

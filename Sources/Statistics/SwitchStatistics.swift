@@ -90,6 +90,11 @@ final class SwitchStatisticsStore {
         return SwitchStatisticsSnapshot(days: days, topApps: Array(sorted.prefix(5)))
     }
 
+    func clear() {
+        defaults.removeObject(forKey: storageKey)
+        NotificationCenter.default.post(name: .switchStatisticsDidChange, object: self)
+    }
+
     private func prune(at date: Date = Date()) {
         var statistics = load()
         let original = statistics.days.count

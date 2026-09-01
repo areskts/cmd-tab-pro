@@ -22,6 +22,11 @@ private enum SwitchStatisticsTests {
         expect(snapshot.topApps.first?.displayName == "Finder", "display name must be retained")
         let stored = defaults.data(forKey: "switchStatistics.v1").map { String(decoding: $0, as: UTF8.self) } ?? ""
         expect(!stored.contains("com.example.old"), "expired app data must be deleted from storage")
+        store.clear()
+        let cleared = store.snapshot(at: today)
+        expect(cleared.sevenDayCount == 0, "clear must remove all counts")
+        expect(cleared.topApps.isEmpty, "clear must remove app summaries")
+        expect(defaults.data(forKey: "switchStatistics.v1") == nil, "clear must remove persisted statistics")
         print("statistics tests passed")
     }
 

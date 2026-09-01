@@ -97,12 +97,8 @@
 
 GitHub Releases 可以直接托管这个 ZIP，其他人下载、解压并将 `CmdTabPro.app` 移入 `/Applications` 后即可使用。发布时应同时上传 `.sha256` 文件，并在发布说明中写明系统版本、芯片要求和首次打开方式。
 
-## 开源准备
+## 源码与许可
 
-项目不依赖第三方库，构建和安装流程都在仓库内。发布到公开仓库前还需要选择许可证；推荐 MIT，但不会在未经确认的情况下自动添加。
+Cmd Tab Pro 源码公开，采用 [PolyForm Noncommercial License 1.0.0](LICENSE)。你可以将本项目用于个人学习、研究、测试和其他非商业用途，也可以在许可证允许的范围内修改和分发代码。未经作者书面授权，不得将本项目或其衍生作品用于商业目的。
 
-默认使用方案 2 的扁平 Cmd+Tab 图标，其他候选方案保存在 `Assets/IconOptions/Flat/`，可以直接在通用页面切换。
-
-当前部署目标为 macOS 26.0，仅支持 Apple Silicon arm64。当前发布包采用 ad-hoc 签名，接受用户手动信任的 Gatekeeper 提示；如果以后需要双击即开，再增加 Developer ID 签名和 Apple notarization。
-
-Bundle ID：`com.ares.cmd.tab`。
+欢迎通过 GitHub Issues 反馈问题或提出建议，也欢迎提交 Pull Request。提交的贡献代码将使用与本项目相同的许可证。

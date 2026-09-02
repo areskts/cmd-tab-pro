@@ -27,6 +27,7 @@ xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework AppKit
   "$projectDir/Sources/Dashboard/StatisticsViewController.swift" \
   "$projectDir/Sources/Dashboard/AboutViewController.swift" \
   "$projectDir/Sources/Dashboard/DashboardWindowController.swift" \
+  "$projectDir/Sources/Reopen/CmdTabMonitor.swift" \
   "$projectDir/Sources/main.swift" \
   -o "$executable"
 

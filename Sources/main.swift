@@ -26,8 +26,20 @@ private func hasVisibleWindow(for processIdentifier: pid_t) -> Bool {
     }
 }
 
-private func shouldShowDashboard(defaultLaunch: Bool?) -> Bool {
-    defaultLaunch ?? true
+private func isVisibleTopLevelWindow(_ window: [String: Any], processIdentifier: pid_t) -> Bool {
+    guard let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t, ownerPID == processIdentifier,
+          (window[kCGWindowLayer as String] as? Int) == 0,
+          (window[kCGWindowIsOnscreen as String] as? Bool) == true,
+          let bounds = window[kCGWindowBounds as String] as? [String: Any],
+          let width = bounds["Width"] as? CGFloat, let height = bounds["Height"] as? CGFloat else { return false }
+    return width > 0 && height > 0
+}
+
+private func hasTopLevelWindow(for processIdentifier: pid_t) -> Bool {
+    let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+    return windows.contains { window in
+        isVisibleTopLevelWindow(window, processIdentifier: processIdentifier)
+    }
 }
 
 private func runSelfTest() {
@@ -61,8 +73,17 @@ private func runSelfTest() {
            "windowless Finder should reopen")
     expect(!shouldSkipFinderReopen(bundleIdentifier: "com.example.app", hasVisibleWindow: true),
            "other apps must not use Finder filtering")
-    expect(shouldShowDashboard(defaultLaunch: true), "normal launch should show dashboard")
-    expect(!shouldShowDashboard(defaultLaunch: false), "background launch must stay quiet")
+    let hiddenWindow: [String: Any] = [
+        kCGWindowOwnerPID as String: pid_t(7), kCGWindowLayer as String: 0,
+        kCGWindowIsOnscreen as String: false,
+        kCGWindowBounds as String: ["Width": CGFloat(100), "Height": CGFloat(100)]
+    ]
+    expect(!isVisibleTopLevelWindow(hiddenWindow, processIdentifier: 7),
+           "hidden windows must not block automatic reopen")
+    var visibleWindow = hiddenWindow
+    visibleWindow[kCGWindowIsOnscreen as String] = true
+    expect(isVisibleTopLevelWindow(visibleWindow, processIdentifier: 7),
+           "visible top-level windows must block duplicate reopen")
     print("self-test passed")
 }
 
@@ -74,12 +95,15 @@ private final class ReopenController {
     private var observer: NSObjectProtocol?
     private var cooldownUntil = [pid_t: TimeInterval]()
     private var countedUntil = [pid_t: TimeInterval]()
+    private lazy var cmdTabMonitor = CmdTabMonitor { [weak self] in self?.cmdTabCompleted() }
     private(set) var isEnabled: Bool
+    private(set) var mode: ReopenMode
 
     init(statistics: SwitchStatisticsStore, defaults: UserDefaults = .standard) {
         self.statistics = statistics
         self.defaults = defaults
         isEnabled = defaults.object(forKey: "reopenEnabled") as? Bool ?? true
+        mode = ReopenMode(rawValue: defaults.string(forKey: "reopenMode") ?? ReopenMode.automatic.rawValue) ?? .automatic
     }
 
     func start() {
@@ -89,20 +113,52 @@ private final class ReopenController {
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             self?.applicationActivated(app)
         }
+        guard mode == .automatic else { return }
+        if cmdTabMonitor.start() {
+            logger.info("automatic mode active")
+        } else {
+            logger.error("automatic mode unavailable: input monitoring permission is missing")
+            mode = .compatible
+            defaults.set(mode.rawValue, forKey: "reopenMode")
+            CGRequestListenEventAccess()
+        }
     }
 
     private func applicationActivated(_ app: NSRunningApplication) {
         guard app.activationPolicy == .regular, !app.isTerminated, app.processIdentifier != ownPid else { return }
         recordSwitch(app)
-        guard isEnabled else { return }
+        guard isEnabled, mode == .compatible else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150)) { [weak self] in
-            self?.reopenIfNeeded(app)
+            guard let self else { return }
+            self.reopenIfNeeded(app, requireWindowless: false)
         }
     }
 
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
         defaults.set(enabled, forKey: "reopenEnabled")
+    }
+
+    func setMode(_ mode: ReopenMode) -> Bool {
+        if mode == .automatic {
+            guard cmdTabMonitor.start() else {
+                CGRequestListenEventAccess()
+                return false
+            }
+        } else {
+            cmdTabMonitor.stop()
+        }
+        self.mode = mode
+        defaults.set(mode.rawValue, forKey: "reopenMode")
+        return true
+    }
+
+    private func cmdTabCompleted() {
+        guard mode == .automatic else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150)) { [weak self] in
+            guard let self, let app = self.workspace.frontmostApplication else { return }
+            self.reopenIfNeeded(app, requireWindowless: true)
+        }
     }
 
     private func recordSwitch(_ app: NSRunningApplication) {
@@ -115,18 +171,19 @@ private final class ReopenController {
         statistics.record(bundleIdentifier: app.bundleIdentifier ?? "name:\(name)", displayName: name)
     }
 
-    private func reopenIfNeeded(_ app: NSRunningApplication) {
+    private func reopenIfNeeded(_ app: NSRunningApplication, requireWindowless: Bool) {
         let now = ProcessInfo.processInfo.systemUptime
         cooldownUntil = cooldownUntil.filter { $0.value > now }
         let pid = app.processIdentifier
         let coolingDown = (cooldownUntil[pid] ?? 0) > now
         let frontmost = workspace.frontmostApplication?.processIdentifier == pid
+        let hasWindow = requireWindowless && hasTopLevelWindow(for: pid)
         let finderHasVisibleWindow = app.bundleIdentifier == "com.apple.finder" && hasVisibleWindow(for: pid)
         guard shouldAttemptReopen(
             enabled: isEnabled, regular: app.activationPolicy == .regular,
             terminated: app.isTerminated, ownProcess: pid == ownPid, frontmost: frontmost,
             coolingDown: coolingDown,
-            excluded: shouldSkipFinderReopen(bundleIdentifier: app.bundleIdentifier, hasVisibleWindow: finderHasVisibleWindow)
+            excluded: hasWindow || shouldSkipFinderReopen(bundleIdentifier: app.bundleIdentifier, hasVisibleWindow: finderHasVisibleWindow)
         ), let bundleURL = app.bundleURL else { return }
         cooldownUntil[pid] = now + 0.5
         do {
@@ -158,6 +215,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         setAppIconOption: { [weak self] option in self?.setAppIconOption(option) },
         diagnosticText: { [weak self] in self?.diagnosticText() ?? "" },
         openReleases: { [weak self] in self?.openReleases() },
+        reopenMode: { [weak self] in self?.controller.mode ?? .compatible },
+        setReopenMode: { [weak self] mode in self?.setReopenMode(mode) },
         restoreDefaults: { [weak self] in self?.restoreDefaults() }
     )
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -178,7 +237,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         controller.start()
         let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool
         logger.info("launch default=\(defaultLaunch ?? true, privacy: .public)")
-        if shouldShowDashboard(defaultLaunch: defaultLaunch) { dashboard.showDashboard() }
+        if defaultLaunch ?? true { dashboard.showDashboard() }
         showPendingIconSwitchError()
     }
 
@@ -288,6 +347,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private func setReopenEnabled(_ enabled: Bool) {
         controller.setEnabled(enabled)
         refreshMenu()
+        dashboard.refresh()
+    }
+
+    private func setReopenMode(_ mode: ReopenMode) {
+        guard controller.setMode(mode) else {
+            showError("无法启用增强自动模式", "请在系统设置的隐私与安全性中允许 Cmd Tab Pro 使用输入监控，然后再次选择增强自动模式。")
+            dashboard.refresh()
+            return
+        }
         dashboard.refresh()
     }
 

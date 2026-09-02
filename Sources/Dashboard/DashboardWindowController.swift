@@ -33,13 +33,15 @@ final class DashboardWindowController: NSWindowController {
          setInterfaceTheme: @escaping (InterfaceTheme) -> Void, menuBarIconVisible: @escaping () -> Bool,
          setMenuBarIconVisible: @escaping (Bool) -> Void, appIconOption: @escaping () -> AppIconOption,
          setAppIconOption: @escaping (AppIconOption) -> Void, diagnosticText: @escaping () -> String,
-         openReleases: @escaping () -> Void, restoreDefaults: @escaping () -> Void) {
+         openReleases: @escaping () -> Void, reopenMode: @escaping () -> ReopenMode,
+         setReopenMode: @escaping (ReopenMode) -> Void, restoreDefaults: @escaping () -> Void) {
         tabViewController = DashboardTabViewController(
             statistics: statistics, isReopenEnabled: isReopenEnabled, setReopenEnabled: setReopenEnabled,
             loginStatus: loginStatus, setLoginEnabled: setLoginEnabled, interfaceTheme: interfaceTheme,
             setInterfaceTheme: setInterfaceTheme, menuBarIconVisible: menuBarIconVisible,
             setMenuBarIconVisible: setMenuBarIconVisible, appIconOption: appIconOption,
             setAppIconOption: setAppIconOption, diagnosticText: diagnosticText, openReleases: openReleases,
+            reopenMode: reopenMode, setReopenMode: setReopenMode,
             restoreDefaults: restoreDefaults
         )
         let contentSize = NSSize(width: 420, height: 460)
@@ -97,12 +99,14 @@ private final class DashboardTabViewController: NSTabViewController {
          setInterfaceTheme: @escaping (InterfaceTheme) -> Void, menuBarIconVisible: @escaping () -> Bool,
          setMenuBarIconVisible: @escaping (Bool) -> Void, appIconOption: @escaping () -> AppIconOption,
          setAppIconOption: @escaping (AppIconOption) -> Void, diagnosticText: @escaping () -> String,
-         openReleases: @escaping () -> Void, restoreDefaults: @escaping () -> Void) {
+         openReleases: @escaping () -> Void, reopenMode: @escaping () -> ReopenMode,
+         setReopenMode: @escaping (ReopenMode) -> Void, restoreDefaults: @escaping () -> Void) {
         generalViewController = GeneralViewController(
             isReopenEnabled: isReopenEnabled, setReopenEnabled: setReopenEnabled,
             loginStatus: loginStatus, setLoginEnabled: setLoginEnabled, interfaceTheme: interfaceTheme,
             setInterfaceTheme: setInterfaceTheme, menuBarIconVisible: menuBarIconVisible,
-            setMenuBarIconVisible: setMenuBarIconVisible, appIconOption: appIconOption, setAppIconOption: setAppIconOption
+            setMenuBarIconVisible: setMenuBarIconVisible, appIconOption: appIconOption, setAppIconOption: setAppIconOption,
+            reopenMode: reopenMode, setReopenMode: setReopenMode
         )
         statisticsViewController = StatisticsViewController(statistics: statistics)
         aboutViewController = AboutViewController(

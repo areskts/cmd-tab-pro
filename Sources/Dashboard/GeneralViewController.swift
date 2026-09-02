@@ -12,9 +12,13 @@ final class GeneralViewController: NSViewController {
     private let setMenuBarIconVisible: (Bool) -> Void
     private let appIconOption: () -> AppIconOption
     private let setAppIconOption: (AppIconOption) -> Void
+    private let reopenMode: () -> ReopenMode
+    private let setReopenMode: (ReopenMode) -> Void
     private let reopenSwitch = NSSwitch()
     private let loginSwitch = NSSwitch()
     private let loginDescription = DashboardStyle.textLabel("", size: 12, color: .secondaryLabelColor)
+    private let reopenModeDescription = DashboardStyle.textLabel("", size: 12, color: .secondaryLabelColor)
+    private let reopenModePopUp = NSPopUpButton()
     private let themePopUp = NSPopUpButton()
     private let menuBarSwitch = NSSwitch()
     private var iconButtons = [NSButton]()
@@ -23,7 +27,8 @@ final class GeneralViewController: NSViewController {
          loginStatus: @escaping () -> SMAppService.Status, setLoginEnabled: @escaping (Bool) throws -> Void,
          interfaceTheme: @escaping () -> InterfaceTheme, setInterfaceTheme: @escaping (InterfaceTheme) -> Void,
          menuBarIconVisible: @escaping () -> Bool, setMenuBarIconVisible: @escaping (Bool) -> Void,
-         appIconOption: @escaping () -> AppIconOption, setAppIconOption: @escaping (AppIconOption) -> Void) {
+         appIconOption: @escaping () -> AppIconOption, setAppIconOption: @escaping (AppIconOption) -> Void,
+         reopenMode: @escaping () -> ReopenMode, setReopenMode: @escaping (ReopenMode) -> Void) {
         self.isReopenEnabled = isReopenEnabled
         self.setReopenEnabled = setReopenEnabled
         self.loginStatus = loginStatus
@@ -34,6 +39,8 @@ final class GeneralViewController: NSViewController {
         self.setMenuBarIconVisible = setMenuBarIconVisible
         self.appIconOption = appIconOption
         self.setAppIconOption = setAppIconOption
+        self.reopenMode = reopenMode
+        self.setReopenMode = setReopenMode
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -60,6 +67,9 @@ final class GeneralViewController: NSViewController {
     func refresh() {
         guard isViewLoaded else { return }
         reopenSwitch.state = isReopenEnabled() ? .on : .off
+        let selectedMode = reopenMode()
+        reopenModePopUp.selectItem(at: ReopenMode.allCases.firstIndex(of: selectedMode) ?? 0)
+        reopenModeDescription.stringValue = selectedMode.description
         updateLoginStatus(loginStatus())
         themePopUp.selectItem(at: InterfaceTheme.allCases.firstIndex(of: interfaceTheme()) ?? 0)
         menuBarSwitch.state = menuBarIconVisible() ? .on : .off
@@ -75,10 +85,15 @@ final class GeneralViewController: NSViewController {
     private func configureControls() {
         DashboardStyle.compact(reopenSwitch)
         DashboardStyle.compact(loginSwitch)
+        DashboardStyle.compact(reopenModePopUp)
         DashboardStyle.compact(themePopUp)
         DashboardStyle.compact(menuBarSwitch)
         reopenSwitch.target = self
         reopenSwitch.action = #selector(toggleReopen)
+        reopenModePopUp.addItems(withTitles: ReopenMode.allCases.map(\.title))
+        reopenModePopUp.target = self
+        reopenModePopUp.action = #selector(changeReopenMode)
+        reopenModePopUp.widthAnchor.constraint(equalToConstant: 112).isActive = true
         loginSwitch.target = self
         loginSwitch.action = #selector(toggleLogin)
         themePopUp.addItems(withTitles: InterfaceTheme.allCases.map(\.title))
@@ -93,8 +108,9 @@ final class GeneralViewController: NSViewController {
         let reopen = DashboardStyle.settingRow(
             title: "自动唤回窗口", description: "切换到无窗口应用时，自动重新打开窗口", control: reopenSwitch
         )
+        let mode = settingRow(title: "唤回模式", descriptionLabel: reopenModeDescription, control: reopenModePopUp)
         let login = settingRow(title: "开机自启动", descriptionLabel: loginDescription, control: loginSwitch)
-        return DashboardStyle.group([reopen, login])
+        return DashboardStyle.group([reopen, mode, login])
     }
 
     private func makeAppearanceCard() -> NSView {
@@ -157,6 +173,12 @@ final class GeneralViewController: NSViewController {
 
     @objc private func toggleReopen() {
         setReopenEnabled(reopenSwitch.state == .on)
+        refresh()
+    }
+
+    @objc private func changeReopenMode() {
+        guard ReopenMode.allCases.indices.contains(reopenModePopUp.indexOfSelectedItem) else { return }
+        setReopenMode(ReopenMode.allCases[reopenModePopUp.indexOfSelectedItem])
         refresh()
     }
 

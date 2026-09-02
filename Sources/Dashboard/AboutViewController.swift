@@ -5,15 +5,17 @@ final class AboutViewController: NSViewController {
     private let appIconOption: () -> AppIconOption
     private let diagnosticText: () -> String
     private let openReleases: () -> Void
+    private let restoreDefaults: () -> Void
     private let iconView = NSImageView()
     private let clearButton = NSButton()
 
     init(statistics: SwitchStatisticsStore, appIconOption: @escaping () -> AppIconOption,
-         diagnosticText: @escaping () -> String, openReleases: @escaping () -> Void) {
+         diagnosticText: @escaping () -> String, openReleases: @escaping () -> Void, restoreDefaults: @escaping () -> Void) {
         self.statistics = statistics
         self.appIconOption = appIconOption
         self.diagnosticText = diagnosticText
         self.openReleases = openReleases
+        self.restoreDefaults = restoreDefaults
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -84,9 +86,11 @@ final class AboutViewController: NSViewController {
         clearButton.action = #selector(clearStatistics)
         clearButton.contentTintColor = .systemRed
         let updateButton = NSButton(title: "检查更新…", target: self, action: #selector(checkForUpdates))
+        let restoreButton = NSButton(title: "恢复默认设置…", target: self, action: #selector(restoreDefaultSettings))
         DashboardStyle.compact(copyButton)
         DashboardStyle.compact(clearButton)
         DashboardStyle.compact(updateButton)
+        DashboardStyle.compact(restoreButton)
         let copy = DashboardStyle.settingRow(
             title: "诊断信息", description: "复制版本、系统和功能状态，不包含使用记录", control: copyButton
         )
@@ -96,7 +100,10 @@ final class AboutViewController: NSViewController {
         let update = DashboardStyle.settingRow(
             title: "检查更新", description: "打开 GitHub Releases 查看最新版本", control: updateButton
         )
-        return DashboardStyle.group([copy, clear, update])
+        let restore = DashboardStyle.settingRow(
+            title: "恢复默认设置", description: "恢复自动唤回、菜单栏图标和界面主题", control: restoreButton
+        )
+        return DashboardStyle.group([copy, clear, update, restore])
     }
 
     @objc private func copyDiagnostics() {
@@ -123,6 +130,18 @@ final class AboutViewController: NSViewController {
 
     @objc private func checkForUpdates() {
         openReleases()
+    }
+
+    @objc private func restoreDefaultSettings() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "恢复默认设置？"
+        alert.informativeText = "将恢复自动唤回、菜单栏图标和界面主题。统计数据、登录时启动和应用图标不会改变。"
+        alert.addButton(withTitle: "恢复")
+        alert.addButton(withTitle: "取消")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        restoreDefaults()
     }
 
     @objc private func applicationBecameActive() {

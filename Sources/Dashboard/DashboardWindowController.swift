@@ -33,13 +33,14 @@ final class DashboardWindowController: NSWindowController {
          setInterfaceTheme: @escaping (InterfaceTheme) -> Void, menuBarIconVisible: @escaping () -> Bool,
          setMenuBarIconVisible: @escaping (Bool) -> Void, appIconOption: @escaping () -> AppIconOption,
          setAppIconOption: @escaping (AppIconOption) -> Void, diagnosticText: @escaping () -> String,
-         openReleases: @escaping () -> Void) {
+         openReleases: @escaping () -> Void, restoreDefaults: @escaping () -> Void) {
         tabViewController = DashboardTabViewController(
             statistics: statistics, isReopenEnabled: isReopenEnabled, setReopenEnabled: setReopenEnabled,
             loginStatus: loginStatus, setLoginEnabled: setLoginEnabled, interfaceTheme: interfaceTheme,
             setInterfaceTheme: setInterfaceTheme, menuBarIconVisible: menuBarIconVisible,
             setMenuBarIconVisible: setMenuBarIconVisible, appIconOption: appIconOption,
-            setAppIconOption: setAppIconOption, diagnosticText: diagnosticText, openReleases: openReleases
+            setAppIconOption: setAppIconOption, diagnosticText: diagnosticText, openReleases: openReleases,
+            restoreDefaults: restoreDefaults
         )
         let contentSize = NSSize(width: 420, height: 460)
         let window = NSWindow(
@@ -96,7 +97,7 @@ private final class DashboardTabViewController: NSTabViewController {
          setInterfaceTheme: @escaping (InterfaceTheme) -> Void, menuBarIconVisible: @escaping () -> Bool,
          setMenuBarIconVisible: @escaping (Bool) -> Void, appIconOption: @escaping () -> AppIconOption,
          setAppIconOption: @escaping (AppIconOption) -> Void, diagnosticText: @escaping () -> String,
-         openReleases: @escaping () -> Void) {
+         openReleases: @escaping () -> Void, restoreDefaults: @escaping () -> Void) {
         generalViewController = GeneralViewController(
             isReopenEnabled: isReopenEnabled, setReopenEnabled: setReopenEnabled,
             loginStatus: loginStatus, setLoginEnabled: setLoginEnabled, interfaceTheme: interfaceTheme,
@@ -105,7 +106,8 @@ private final class DashboardTabViewController: NSTabViewController {
         )
         statisticsViewController = StatisticsViewController(statistics: statistics)
         aboutViewController = AboutViewController(
-            statistics: statistics, appIconOption: appIconOption, diagnosticText: diagnosticText, openReleases: openReleases
+            statistics: statistics, appIconOption: appIconOption, diagnosticText: diagnosticText, openReleases: openReleases,
+            restoreDefaults: restoreDefaults
         )
         super.init(nibName: nil, bundle: nil)
         tabStyle = .toolbar

@@ -22,7 +22,7 @@
 8. 支持暂停、退出和登录时启动。
 9. 展示近 7 天切换总量、每日趋势和切换最多的 5 个 App。
 10. 统计只保存在本机，并自动淘汰 7 天前的数据。
-11. 用户可以清除全部统计，并复制不包含使用记录的诊断信息。
+11. 用户可以清除全部统计，复制不包含使用记录的诊断信息，并恢复部分默认设置。
 12. 用户主动操作时可以打开 GitHub Releases，不进行后台更新检查。
 13. 主页面使用“通用”“统计”“关于”三个原生工具栏页签。
 14. 当前 ad-hoc 分发版本支持在三套内置图标之间切换。
@@ -50,17 +50,17 @@
           |
           +---- 没有窗口：创建默认窗口并前置
 
-工具也会在 Dock、Spotlight 或其他方式激活应用时执行相同行为。NSWorkspace 的激活通知不提供输入来源，为了只区分 Cmd+Tab 而增加全局键盘监听不值得。
+工具也会在 Dock、Spotlight 或其他方式激活应用时执行相同行为。Finder 例外：有可见窗口时不发送多余 reopen，没有可见窗口时仍允许唤回。NSWorkspace 的激活通知不提供输入来源，为了只区分 Cmd+Tab 而增加全局键盘监听不值得。
 
 同一个激活通知也用于本地统计。统计记录目标 App 的 Bundle ID、显示名称和次数，不记录窗口标题或内容。reopen 可能再次触发激活通知，因此同一 PID 在 0.5 秒内只统计一次。
 
-## 4. 为什么不检查窗口数量
+## 4. 为什么只对 Finder 检查可见窗口
 
-检查窗口数量需要 Accessibility，首次运行必须由用户手动授权，而且 macOS 可能让授权前已启动的进程继续看到旧权限状态。这与“安装后直接使用”的目标冲突。
+通用窗口数量检查需要 Accessibility，首次运行必须由用户手动授权，而且 macOS 可能让授权前已启动的进程继续看到旧权限状态。这与“安装后直接使用”的目标冲突。
 
-公共 CGWindowList 查询对最小化窗口、其他 Space 和部分应用的隐藏窗口也不够可靠。为了修正这些边界而引入 WindowServer 或 AX 模型，会重新走向 AltTab 的复杂度。
+Finder 是已确认会被误唤回的系统特例，因此只用公共 CGWindowList 查询当前屏幕上的 Finder 顶层窗口。这个判断不扩展到其他应用，也不维护窗口列表；最小化窗口、其他 Space 和隐藏窗口仍不作为通用窗口状态处理。
 
-reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口如何创建”的标准入口。第一版直接把判断交给目标应用。
+其他应用仍由 reopen 入口决定“已有窗口如何处理、没有窗口如何创建”。Finder 的可见窗口判断只用于避免已打开窗口时重复请求。
 
 ## 5. 为什么使用废弃的 LaunchServices 入口
 
@@ -94,7 +94,7 @@ reopen 本来就是目标应用决定“已有窗口如何处理、没有窗口�
 
 主窗口内容区固定为 420 × 460，暂不提供自由缩放。开关使用紧凑尺寸，三套图标在同一行显示。
 
-通用页提供自动唤回、开机自启动、界面主题、菜单栏图标和应用图标设置。统计页展示今日计数、7 天合计、7 天柱状图和 Top 5 App。关于页展示版本和 Bundle ID，并提供复制诊断信息、清除统计和检查更新。清除统计必须二次确认；没有统计数据时按钮保持禁用。
+通用页提供自动唤回、开机自启动、界面主题、菜单栏图标和应用图标设置。统计页展示今日计数、7 天合计、7 天柱状图和 Top 5 App。关于页展示版本和 Bundle ID，并提供复制诊断信息、清除统计、恢复默认设置和检查更新。清除统计与恢复默认设置都必须二次确认。
 
 诊断信息只包含运行环境和功能状态，不包含 App 名称、切换次数或其他统计记录。检查更新只打开 GitHub Releases。
 
@@ -207,12 +207,14 @@ scripts/install.sh 负责：
 - 浅色主题使用白色页面底和浅灰功能块，深色主题保持对应层级。
 - 三套图标在通用页同一行完整显示，选中项有高亮边框。
 - Cmd+W 关闭窗口但保留进程，Cmd+Q 退出应用。
+- Finder 有可见窗口时不重复唤回，没有可见窗口时可以唤回。
+- 恢复默认设置只恢复自动唤回、菜单栏图标和界面主题，不影响统计、登录项和应用图标。
 
 ## 11. 风险与边界
 
 最脆弱的假设是目标应用正确实现 reopen。规范 AppKit 应用会根据 hasVisibleWindows 决定是否创建窗口；部分跨平台应用可能忽略 reopen，或在已有窗口时错误地创建新窗口。
 
-第一版不增加应用特例。只有个人实际使用中确认某个高频应用存在副作用时，才增加一个很小的 bundle ID 排除列表。
+Finder 的窗口判断是当前唯一的内置应用特例。它只判断当前屏幕上的顶层可见窗口，不代表完整的 Finder 窗口状态。
 
 统计无法区分 Cmd+Tab、Dock、Spotlight 和鼠标点击，只能准确识别成为前台的目标 App。页面文案明确使用“应用切换”，不把数据描述为“Cmd+Tab 次数”。
 
@@ -234,4 +236,5 @@ scripts/install.sh 负责：
 
 - [NSWorkspace.didActivateApplicationNotification](https://developer.apple.com/documentation/appkit/nsworkspace/didactivateapplicationnotification)
 - [NSWorkspace](https://developer.apple.com/documentation/appkit/nsworkspace)
+- [CGWindowListCopyWindowInfo](https://developer.apple.com/documentation/coregraphics/1455076-cgwindowlistcopywindowinfo)
 - [SMAppService](https://developer.apple.com/documentation/servicemanagement/smappservice)

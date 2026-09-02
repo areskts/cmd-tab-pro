@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Darwin
 import ServiceManagement
 import os
@@ -11,6 +12,18 @@ private func shouldAttemptReopen(enabled: Bool, regular: Bool, terminated: Bool,
                                  ownProcess: Bool, frontmost: Bool, coolingDown: Bool,
                                  excluded: Bool = false) -> Bool {
     enabled && regular && !terminated && !ownProcess && frontmost && !coolingDown && !excluded
+}
+
+private func shouldSkipFinderReopen(bundleIdentifier: String?, hasVisibleWindow: Bool) -> Bool {
+    bundleIdentifier == "com.apple.finder" && hasVisibleWindow
+}
+
+private func hasVisibleWindow(for processIdentifier: pid_t) -> Bool {
+    let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+    return windows.contains { window in
+        guard let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t, ownerPID == processIdentifier else { return false }
+        return (window[kCGWindowLayer as String] as? Int) == 0
+    }
 }
 
 private func shouldShowDashboard(defaultLaunch: Bool?) -> Bool {
@@ -42,6 +55,12 @@ private func runSelfTest() {
                                 terminated: ready.terminated, ownProcess: ready.ownProcess,
                                 frontmost: ready.frontmost, coolingDown: false, excluded: true),
            "excluded apps must not reopen")
+    expect(shouldSkipFinderReopen(bundleIdentifier: "com.apple.finder", hasVisibleWindow: true),
+           "Finder with a visible window must not reopen")
+    expect(!shouldSkipFinderReopen(bundleIdentifier: "com.apple.finder", hasVisibleWindow: false),
+           "windowless Finder should reopen")
+    expect(!shouldSkipFinderReopen(bundleIdentifier: "com.example.app", hasVisibleWindow: true),
+           "other apps must not use Finder filtering")
     expect(shouldShowDashboard(defaultLaunch: true), "normal launch should show dashboard")
     expect(!shouldShowDashboard(defaultLaunch: false), "background launch must stay quiet")
     print("self-test passed")
@@ -102,10 +121,12 @@ private final class ReopenController {
         let pid = app.processIdentifier
         let coolingDown = (cooldownUntil[pid] ?? 0) > now
         let frontmost = workspace.frontmostApplication?.processIdentifier == pid
+        let finderHasVisibleWindow = app.bundleIdentifier == "com.apple.finder" && hasVisibleWindow(for: pid)
         guard shouldAttemptReopen(
             enabled: isEnabled, regular: app.activationPolicy == .regular,
             terminated: app.isTerminated, ownProcess: pid == ownPid, frontmost: frontmost,
-            coolingDown: coolingDown, excluded: app.bundleIdentifier == "com.apple.finder"
+            coolingDown: coolingDown,
+            excluded: shouldSkipFinderReopen(bundleIdentifier: app.bundleIdentifier, hasVisibleWindow: finderHasVisibleWindow)
         ), let bundleURL = app.bundleURL else { return }
         cooldownUntil[pid] = now + 0.5
         do {
@@ -136,7 +157,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         appIconOption: { [weak self] in self?.currentAppIconOption() ?? .option2 },
         setAppIconOption: { [weak self] option in self?.setAppIconOption(option) },
         diagnosticText: { [weak self] in self?.diagnosticText() ?? "" },
-        openReleases: { [weak self] in self?.openReleases() }
+        openReleases: { [weak self] in self?.openReleases() },
+        restoreDefaults: { [weak self] in self?.restoreDefaults() }
     )
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let menu = NSMenu()
@@ -292,6 +314,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private func setInterfaceTheme(_ theme: InterfaceTheme) {
         UserDefaults.standard.set(theme.rawValue, forKey: "interfaceTheme")
         applyInterfaceTheme(theme)
+    }
+
+    private func restoreDefaults() {
+        setReopenEnabled(true)
+        setMenuBarIconVisible(false)
+        setInterfaceTheme(.system)
+        dashboard.refresh()
     }
 
     private func applyInterfaceTheme(_ theme: InterfaceTheme) {

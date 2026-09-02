@@ -6,6 +6,8 @@ final class StatisticsViewController: NSViewController {
     private let weekValue = valueLabel()
     private let chartView = WeeklySwitchChartView()
     private let topAppsStack = NSStackView()
+    private var lastSnapshot: SwitchStatisticsSnapshot?
+    private var applicationIcons = [String: NSImage]()
 
     init(statistics: SwitchStatisticsStore) {
         self.statistics = statistics
@@ -47,6 +49,8 @@ final class StatisticsViewController: NSViewController {
     func refresh() {
         guard isViewLoaded else { return }
         let snapshot = statistics.snapshot()
+        guard snapshot != lastSnapshot else { return }
+        lastSnapshot = snapshot
         todayValue.stringValue = snapshot.todayCount.formatted()
         weekValue.stringValue = snapshot.sevenDayCount.formatted()
         chartView.days = snapshot.days
@@ -119,10 +123,15 @@ final class StatisticsViewController: NSViewController {
     }
 
     private func applicationIcon(for bundleIdentifier: String) -> NSImage {
+        if let icon = applicationIcons[bundleIdentifier] { return icon }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
-            return NSImage(systemSymbolName: "app", accessibilityDescription: nil) ?? NSImage()
+            let icon = NSImage(systemSymbolName: "app", accessibilityDescription: nil) ?? NSImage()
+            applicationIcons[bundleIdentifier] = icon
+            return icon
         }
-        return NSWorkspace.shared.icon(forFile: url.path)
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        applicationIcons[bundleIdentifier] = icon
+        return icon
     }
 
     @objc private func statisticsChanged() {

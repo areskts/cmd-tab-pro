@@ -69,12 +69,12 @@ final class DashboardWindowController: NSWindowController {
     }
 
     func refresh() {
-        tabViewController.refresh()
+        tabViewController.refreshSelectedTab()
     }
 
     private func show(selectedTab: Int?) {
         if let selectedTab { tabViewController.selectedTabViewItemIndex = selectedTab }
-        tabViewController.refresh()
+        tabViewController.refreshSelectedTab()
         if !hasCentered {
             window?.center()
             hasCentered = true
@@ -117,10 +117,13 @@ private final class DashboardTabViewController: NSTabViewController {
 
     required init?(coder: NSCoder) { nil }
 
-    func refresh() {
-        generalViewController.refresh()
-        statisticsViewController.refresh()
-        aboutViewController.refresh()
+    func refreshSelectedTab() {
+        switch selectedTabViewItemIndex {
+        case 0: generalViewController.refresh()
+        case 1: statisticsViewController.refresh()
+        case 2: aboutViewController.refresh()
+        default: break
+        }
     }
 
     private func addTab(_ label: String, symbol: String, viewController: NSViewController) {

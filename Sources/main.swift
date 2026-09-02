@@ -8,8 +8,9 @@ private let logger = Logger(subsystem: bundleIdentifier, category: "reopen")
 private let releasesURL = URL(string: "https://github.com/areskts/cmd-tab-pro/releases/latest")!
 
 private func shouldAttemptReopen(enabled: Bool, regular: Bool, terminated: Bool,
-                                 ownProcess: Bool, frontmost: Bool, coolingDown: Bool) -> Bool {
-    enabled && regular && !terminated && !ownProcess && frontmost && !coolingDown
+                                 ownProcess: Bool, frontmost: Bool, coolingDown: Bool,
+                                 excluded: Bool = false) -> Bool {
+    enabled && regular && !terminated && !ownProcess && frontmost && !coolingDown && !excluded
 }
 
 private func shouldShowDashboard(defaultLaunch: Bool?) -> Bool {
@@ -37,6 +38,10 @@ private func runSelfTest() {
                                 terminated: ready.terminated, ownProcess: ready.ownProcess,
                                 frontmost: ready.frontmost, coolingDown: true),
            "cooldown must prevent duplicate reopen")
+    expect(!shouldAttemptReopen(enabled: ready.enabled, regular: ready.regular,
+                                terminated: ready.terminated, ownProcess: ready.ownProcess,
+                                frontmost: ready.frontmost, coolingDown: false, excluded: true),
+           "excluded apps must not reopen")
     expect(shouldShowDashboard(defaultLaunch: true), "normal launch should show dashboard")
     expect(!shouldShowDashboard(defaultLaunch: false), "background launch must stay quiet")
     print("self-test passed")
@@ -100,7 +105,7 @@ private final class ReopenController {
         guard shouldAttemptReopen(
             enabled: isEnabled, regular: app.activationPolicy == .regular,
             terminated: app.isTerminated, ownProcess: pid == ownPid, frontmost: frontmost,
-            coolingDown: coolingDown
+            coolingDown: coolingDown, excluded: app.bundleIdentifier == "com.apple.finder"
         ), let bundleURL = app.bundleURL else { return }
         cooldownUntil[pid] = now + 0.5
         do {
@@ -126,7 +131,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         setLoginEnabled: { [weak self] enabled in try self?.setLoginEnabled(enabled) },
         interfaceTheme: { [weak self] in self?.interfaceTheme() ?? .system },
         setInterfaceTheme: { [weak self] theme in self?.setInterfaceTheme(theme) },
-        menuBarIconVisible: { [weak self] in self?.menuBarIconVisible() ?? true },
+        menuBarIconVisible: { [weak self] in self?.menuBarIconVisible() ?? false },
         setMenuBarIconVisible: { [weak self] visible in self?.setMenuBarIconVisible(visible) },
         appIconOption: { [weak self] in self?.currentAppIconOption() ?? .option2 },
         setAppIconOption: { [weak self] option in self?.setAppIconOption(option) },
@@ -294,7 +299,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     private func menuBarIconVisible() -> Bool {
-        guard UserDefaults.standard.object(forKey: "menuBarIconVisible") != nil else { return true }
+        guard UserDefaults.standard.object(forKey: "menuBarIconVisible") != nil else { return false }
         return UserDefaults.standard.bool(forKey: "menuBarIconVisible")
     }
 

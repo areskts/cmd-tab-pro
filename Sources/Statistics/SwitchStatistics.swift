@@ -45,7 +45,6 @@ final class SwitchStatisticsStore {
     init(defaults: UserDefaults = .standard, calendar: Calendar = .autoupdatingCurrent) {
         self.defaults = defaults
         self.calendar = calendar
-        prune()
     }
 
     func record(bundleIdentifier: String, displayName: String, at date: Date = Date()) {
@@ -93,14 +92,6 @@ final class SwitchStatisticsStore {
     func clear() {
         defaults.removeObject(forKey: storageKey)
         NotificationCenter.default.post(name: .switchStatisticsDidChange, object: self)
-    }
-
-    private func prune(at date: Date = Date()) {
-        var statistics = load()
-        let original = statistics.days.count
-        retainRecentDays(in: &statistics, relativeTo: date)
-        guard statistics.days.count != original else { return }
-        save(statistics)
     }
 
     private func retainRecentDays(in statistics: inout StoredStatistics, relativeTo date: Date) {

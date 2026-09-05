@@ -4,13 +4,14 @@
   <img src="Assets/AppIcon.png" alt="Cmd Tab Pro 图标" width="112">
 </p>
 
-有些 macOS 应用按下 `Cmd+W` 后只关闭窗口，进程仍在运行。再次使用 `Cmd+Tab` 切回应用时，窗口却不会回来。
+有些 macOS 应用按下 `Cmd+W` 或关闭最后一个窗口后仍在后台运行，但再次使用 `Cmd+Tab` 切回时，窗口不会自动回来。
 
-**Cmd Tab Pro** 保留系统原生 `Cmd+Tab`，切换到无窗口应用时自动唤回窗口，让应用切换更丝滑。
+**Cmd Tab Pro** 为系统原生 `Cmd+Tab` 补上窗口唤回能力：不替换系统切换器，在切回没有可见窗口的应用时请求它重新打开窗口，让应用切换更顺畅。
 
 <p align="center">
-  <img src="Assets/Screenshots/main-dashboard.png" alt="Cmd Tab Pro 通用页面" width="410">
-  <img src="Assets/Screenshots/statistics.png" alt="Cmd Tab Pro 统计页面" width="410">
+  <img src="Assets/Screenshots/main-dashboard.png" alt="Cmd Tab Pro v0.4.1 通用页面" width="270">
+  <img src="Assets/Screenshots/statistics.png" alt="Cmd Tab Pro v0.4.1 统计页面" width="270">
+  <img src="Assets/Screenshots/about.png" alt="Cmd Tab Pro v0.4.1 关于页面" width="270">
 </p>
 
 <p align="center">
@@ -19,16 +20,17 @@
   · Apple Silicon
 </p>
 
-## v0.4.0
+## 当前版本：v0.4.1
 
-新增增强自动模式：在保留系统原生 `Cmd+Tab` 的前提下，监听一次完整的 `Cmd+Tab` 切换，并在目标应用没有可见窗口时请求重新打开窗口。此模式需要输入监控权限，但不会拦截、替换或修改系统快捷键。
+v0.4.1 延续增强自动模式：在保留系统原生 `Cmd+Tab` 的前提下，被动识别一次完整的应用切换，并在目标应用没有可见顶层窗口时请求重新打开窗口。此模式需要输入监控权限，但不会拦截、替换或修改系统快捷键，也不会监听 `Cmd+W` 或记录其他键盘输入。
 
 如果不希望授予权限，可以使用兼容模式。兼容模式只依赖应用激活通知，无法区分 `Cmd+Tab`、Dock、Spotlight 或其他激活来源，但无需辅助功能、输入监控或屏幕录制权限。输入监控不可用时，应用会自动回退到兼容模式。
 
 ## 功能亮点
 
-- **保留原生体验**：不接管、不替换系统 `Cmd+Tab`；兼容模式不需要辅助功能、输入监控或屏幕录制权限。
+- **保留原生体验**：不接管、不替换系统 `Cmd+Tab`，继续使用熟悉的系统应用切换器。
 - **自动唤回窗口**：切换到无窗口应用时，自动重新打开窗口并前置。
+- **两种唤回模式**：增强自动模式精确响应 `Cmd+Tab`；兼容模式零权限运行，并在应用重新激活时尝试唤回。
 - **近 7 天统计**：展示每日切换趋势和切换最多的 5 个 App，可以随时清除。
 - **常用设置集中管理**：支持登录时启动、兼容模式或增强自动模式、浅色或深色主题，以及菜单栏图标显示。
 - **三套应用图标**：可以在通用页面切换图标，应用会自动重新签名并重启。
@@ -42,7 +44,7 @@
 
     bash scripts/install.sh
 
-安装脚本会为 macOS 26 构建 Apple Silicon arm64 二进制、生成 AppIcon.icns、启用 hardened runtime、进行 ad-hoc 签名、复制到 `/Applications` 并启动。兼容模式不需要辅助功能或输入监控权限。
+安装脚本会为 macOS 26 构建 Apple Silicon arm64 二进制、生成 AppIcon.icns、启用 hardened runtime、进行 ad-hoc 签名、复制到 `/Applications` 并启动。默认兼容模式不需要任何权限；启用增强自动模式时需要授予输入监控权限。
 
 ## 使用
 
@@ -52,7 +54,7 @@
 
 菜单栏可以暂停功能、设置登录时启动、隐藏图标或退出。主页面也可以切换兼容模式和增强自动模式，并控制菜单栏图标是否显示；关闭后仍可重新打开 App 进入主页面并恢复图标。
 
-统计记录普通 GUI 应用成为前台应用的次数，来源可能是 Cmd+Tab、Dock、Spotlight 或点击窗口。当前无权限方案无法区分具体切换来源。
+统计记录普通 GUI 应用成为前台应用的次数，来源可能是 `Cmd+Tab`、Dock、Spotlight 或点击窗口，因此统计数字代表应用切换次数，而不是仅统计 `Cmd+Tab`。
 
 界面主题支持跟随系统、浅色和深色，默认跟随系统并记住用户选择。
 
@@ -86,7 +88,7 @@
 ## 边界
 
 - Cmd+Q 已退出的应用不会出现在 Cmd+Tab 中，也不会由本工具启动。
-- 工具不检查窗口数量，而是把是否需要创建窗口交给目标应用自己的 reopen 处理。
+- 工具只判断目标应用是否存在可见顶层窗口，不读取窗口标题、内容或缩略图；确认无可见窗口后，再把是否创建窗口交给目标应用自己的 reopen 处理。
 - 规范的 macOS 应用在已有窗口时只前置，在没有窗口时创建窗口。
 - 少数不规范应用可能忽略 reopen，或把它解释为新建窗口。
 

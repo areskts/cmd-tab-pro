@@ -20,14 +20,12 @@ final class StatisticsViewController: NSViewController {
         let metrics = makeMetrics()
         let chart = DashboardStyle.section("近 7 天趋势", content: makeChart())
         let ranking = DashboardStyle.section("切换 App 排行", content: makeRanking())
-        let stack = NSStackView(views: [metrics, chart, ranking])
+        let stack = NSStackView(views: [DashboardStyle.pageHeader("切换统计", subtitle: "了解最近 7 天的应用切换习惯。"), metrics, chart, ranking])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 14
+        stack.spacing = 22
         for item in stack.arrangedSubviews { item.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
-        metrics.heightAnchor.constraint(equalToConstant: 70).isActive = true
-        chart.heightAnchor.constraint(equalToConstant: 158).isActive = true
-        ranking.heightAnchor.constraint(equalToConstant: 164).isActive = true
+        metrics.heightAnchor.constraint(equalToConstant: 90).isActive = true
         view = DashboardStyle.contentView(stack)
     }
 
@@ -70,6 +68,7 @@ final class StatisticsViewController: NSViewController {
 
     private func makeChart() -> NSView {
         chartView.translatesAutoresizingMaskIntoConstraints = false
+        chartView.heightAnchor.constraint(equalToConstant: 160).isActive = true
         return DashboardStyle.card(chartView)
     }
 
@@ -81,7 +80,7 @@ final class StatisticsViewController: NSViewController {
     }
 
     private func metricCard(title: String, value: NSTextField) -> NSView {
-        let stack = NSStackView(views: [DashboardStyle.textLabel(title, size: 12, color: .secondaryLabelColor), value])
+        let stack = NSStackView(views: [DashboardStyle.textLabel(title, size: 13, color: .secondaryLabelColor), value])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 3
@@ -100,16 +99,16 @@ final class StatisticsViewController: NSViewController {
             return
         }
         for (index, app) in apps.enumerated() {
-            let rank = DashboardStyle.textLabel("\(index + 1)", size: 11, color: .tertiaryLabelColor)
+            let rank = DashboardStyle.textLabel("\(index + 1)", size: 12, color: .tertiaryLabelColor)
             rank.alignment = .right
             rank.widthAnchor.constraint(equalToConstant: 14).isActive = true
             let icon = NSImageView(image: applicationIcon(for: app.bundleIdentifier))
             icon.imageScaling = .scaleProportionallyUpOrDown
             NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 20), icon.heightAnchor.constraint(equalToConstant: 20)])
-            let name = DashboardStyle.textLabel(app.displayName, size: 12)
+            let name = DashboardStyle.textLabel(app.displayName, size: 13)
             name.lineBreakMode = .byTruncatingTail
-            let count = DashboardStyle.textLabel(app.count.formatted(), size: 12, weight: .medium, color: .secondaryLabelColor)
-            count.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+            let count = DashboardStyle.textLabel(app.count.formatted(), size: 13, weight: .medium, color: .secondaryLabelColor)
+            count.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
             count.alignment = .right
             let spacer = NSView()
             spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -117,6 +116,7 @@ final class StatisticsViewController: NSViewController {
             row.orientation = .horizontal
             row.alignment = .centerY
             row.spacing = 7
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 32).isActive = true
             topAppsStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: topAppsStack.widthAnchor).isActive = true
         }
@@ -144,8 +144,8 @@ final class StatisticsViewController: NSViewController {
     }
 
     private static func valueLabel() -> NSTextField {
-        let label = DashboardStyle.textLabel("0", size: 24, weight: .semibold)
-        label.font = .monospacedDigitSystemFont(ofSize: 24, weight: .semibold)
+        let label = DashboardStyle.textLabel("0", size: 30, weight: .semibold)
+        label.font = .monospacedDigitSystemFont(ofSize: 30, weight: .semibold)
         return label
     }
 }

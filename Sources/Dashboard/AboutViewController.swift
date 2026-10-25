@@ -23,12 +23,13 @@ final class AboutViewController: NSViewController {
 
     override func loadView() {
         let stack = NSStackView(views: [
-            DashboardStyle.section("关于", content: makeAboutCard()),
+            DashboardStyle.pageHeader("关于", subtitle: "查看版本信息，管理诊断与维护工具。"),
+            DashboardStyle.section("应用信息", content: makeAboutCard()),
             DashboardStyle.section("工具", content: makeActionsCard())
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 18
+        stack.spacing = 22
         for item in stack.arrangedSubviews { item.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         view = DashboardStyle.contentView(stack)
     }
@@ -87,10 +88,10 @@ final class AboutViewController: NSViewController {
         clearButton.contentTintColor = .systemRed
         let updateButton = NSButton(title: "检查更新…", target: self, action: #selector(checkForUpdates))
         let restoreButton = NSButton(title: "恢复默认设置…", target: self, action: #selector(restoreDefaultSettings))
-        DashboardStyle.compact(copyButton)
-        DashboardStyle.compact(clearButton)
-        DashboardStyle.compact(updateButton)
-        DashboardStyle.compact(restoreButton)
+        DashboardStyle.configure(copyButton)
+        DashboardStyle.configure(clearButton)
+        DashboardStyle.configure(updateButton)
+        DashboardStyle.configure(restoreButton)
         let copy = DashboardStyle.settingRow(
             title: "诊断信息", description: "复制版本、系统和功能状态，不包含使用记录", control: copyButton
         )

@@ -10,7 +10,7 @@ version="$(plutil -extract CFBundleShortVersionString raw "$projectDir/Resources
 archive="$releaseDir/Cmd-Tab-Pro-v$version-macOS-26-arm64-adhoc.zip"
 checksum="$archive.sha256"
 
-CMD_TAB_PRO_BUILD_ONLY=1 CMD_TAB_PRO_ICON_OPTION=option2 bash "$projectDir/scripts/install.sh"
+CMD_TAB_PRO_BUILD_ONLY=1 CMD_TAB_PRO_ICON_OPTION=option2 CMD_TAB_PRO_SIGN_IDENTITY=- bash "$projectDir/scripts/install.sh"
 if [ "$(lipo -archs "$executable")" != "arm64" ]; then
   echo "Release executable is not arm64-only." >&2
   exit 1

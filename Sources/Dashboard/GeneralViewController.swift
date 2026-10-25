@@ -46,15 +46,21 @@ final class GeneralViewController: NSViewController {
 
     required init?(coder: NSCoder) { nil }
 
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        refresh()
+    }
+
     override func loadView() {
         configureControls()
         let stack = NSStackView(views: [
+            DashboardStyle.pageHeader("切换设置", subtitle: "设置窗口唤回、启动方式与应用外观。"),
             DashboardStyle.section("启动", content: makeStartupCard()),
             DashboardStyle.section("外观", content: makeAppearanceCard())
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 24
+        stack.spacing = 22
         for item in stack.arrangedSubviews { item.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         view = DashboardStyle.contentView(stack)
     }
@@ -83,23 +89,23 @@ final class GeneralViewController: NSViewController {
     }
 
     private func configureControls() {
-        DashboardStyle.compact(reopenSwitch)
-        DashboardStyle.compact(loginSwitch)
-        DashboardStyle.compact(reopenModePopUp)
-        DashboardStyle.compact(themePopUp)
-        DashboardStyle.compact(menuBarSwitch)
+        DashboardStyle.configure(reopenSwitch)
+        DashboardStyle.configure(loginSwitch)
+        DashboardStyle.configure(reopenModePopUp)
+        DashboardStyle.configure(themePopUp)
+        DashboardStyle.configure(menuBarSwitch)
         reopenSwitch.target = self
         reopenSwitch.action = #selector(toggleReopen)
         reopenModePopUp.addItems(withTitles: ReopenMode.allCases.map(\.title))
         reopenModePopUp.target = self
         reopenModePopUp.action = #selector(changeReopenMode)
-        reopenModePopUp.widthAnchor.constraint(equalToConstant: 112).isActive = true
+        reopenModePopUp.widthAnchor.constraint(equalToConstant: 160).isActive = true
         loginSwitch.target = self
         loginSwitch.action = #selector(toggleLogin)
         themePopUp.addItems(withTitles: InterfaceTheme.allCases.map(\.title))
         themePopUp.target = self
         themePopUp.action = #selector(changeTheme)
-        themePopUp.widthAnchor.constraint(equalToConstant: 100).isActive = true
+        themePopUp.widthAnchor.constraint(equalToConstant: 140).isActive = true
         menuBarSwitch.target = self
         menuBarSwitch.action = #selector(toggleMenuBarIcon)
     }
@@ -108,8 +114,8 @@ final class GeneralViewController: NSViewController {
         let reopen = DashboardStyle.settingRow(
             title: "自动唤回窗口", description: "切换到无窗口应用时，自动重新打开窗口", control: reopenSwitch
         )
-        let mode = settingRow(title: "唤回模式", descriptionLabel: reopenModeDescription, control: reopenModePopUp)
-        let login = settingRow(title: "开机自启动", descriptionLabel: loginDescription, control: loginSwitch)
+        let mode = DashboardStyle.settingRow(title: "唤回模式", descriptionLabel: reopenModeDescription, control: reopenModePopUp)
+        let login = DashboardStyle.settingRow(title: "开机自启动", descriptionLabel: loginDescription, control: loginSwitch)
         return DashboardStyle.group([reopen, mode, login])
     }
 
@@ -123,10 +129,10 @@ final class GeneralViewController: NSViewController {
         let iconRow = NSStackView(views: AppIconOption.allCases.enumerated().map(makeIconButton))
         iconRow.orientation = .horizontal
         iconRow.alignment = .centerY
-        iconRow.spacing = 5
+        iconRow.spacing = 12
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let icons = NSStackView(views: [DashboardStyle.textLabel("应用图标", size: 12, weight: .medium), spacer, iconRow])
+        let icons = NSStackView(views: [DashboardStyle.textLabel("应用图标", size: 14, weight: .medium), spacer, iconRow])
         icons.orientation = .horizontal
         icons.alignment = .centerY
         return DashboardStyle.group([theme, menuBar, icons])
@@ -140,24 +146,11 @@ final class GeneralViewController: NSViewController {
         button.setButtonType(.toggle)
         button.isBordered = false
         button.wantsLayer = true
-        button.layer?.cornerRadius = 10
+        button.layer?.cornerRadius = 12
         button.imageScaling = .scaleProportionallyUpOrDown
-        NSLayoutConstraint.activate([button.widthAnchor.constraint(equalToConstant: 38), button.heightAnchor.constraint(equalToConstant: 38)])
+        NSLayoutConstraint.activate([button.widthAnchor.constraint(equalToConstant: 52), button.heightAnchor.constraint(equalToConstant: 52)])
         iconButtons.append(button)
         return button
-    }
-
-    private func settingRow(title: String, descriptionLabel: NSTextField, control: NSView) -> NSView {
-        let labels = NSStackView(views: [DashboardStyle.textLabel(title, size: 12, weight: .medium), descriptionLabel])
-        labels.orientation = .vertical
-        labels.alignment = .leading
-        labels.spacing = 2
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let row = NSStackView(views: [labels, spacer, control])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        return row
     }
 
     private func updateLoginStatus(_ status: SMAppService.Status) {

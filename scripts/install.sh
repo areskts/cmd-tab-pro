@@ -13,26 +13,38 @@ iconSource="$projectDir/Assets/AppIcon.png"
 iconOptionsSource="$projectDir/Assets/IconOptions/Flat"
 iconOptionsDestination="$stagedApp/Contents/Resources/IconOptions"
 iconsetRoot="$buildDir/iconsets"
+identityFile="$HOME/.config/cmd-tab-pro/signing-identity"
+signingIdentity="${CMD_TAB_PRO_SIGN_IDENTITY:-$(cat "$identityFile" 2>/dev/null || echo -)}"
 
 rm -rf "$stagedApp" "$previousApp" "$iconsetRoot"
 mkdir -p "$stagedApp/Contents/MacOS" "$stagedApp/Contents/Helpers" "$iconOptionsDestination" "$iconsetRoot"
 cp "$projectDir/Resources/Info.plist" "$stagedApp/Contents/Info.plist"
 plutil -lint "$stagedApp/Contents/Info.plist"
 
-xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework AppKit -framework ServiceManagement \
+xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework AppKit -framework ServiceManagement -framework ScreenCaptureKit -framework Security -framework CryptoKit \
   "$projectDir/Sources/Statistics/SwitchStatistics.swift" \
   "$projectDir/Sources/Appearance/AppIconOption.swift" \
+  "$projectDir/Sources/IconSwitcher/CodeSignature.swift" \
   "$projectDir/Sources/Dashboard/DashboardStyle.swift" \
   "$projectDir/Sources/Dashboard/GeneralViewController.swift" \
   "$projectDir/Sources/Dashboard/StatisticsViewController.swift" \
   "$projectDir/Sources/Dashboard/AboutViewController.swift" \
+  "$projectDir/Sources/Dashboard/EnhancementsViewController.swift" \
   "$projectDir/Sources/Dashboard/DashboardWindowController.swift" \
   "$projectDir/Sources/Reopen/CmdTabMonitor.swift" \
+  "$projectDir/Sources/Reopen/ReopenController.swift" \
+  "$projectDir/Sources/Windows/WindowPolicy.swift" \
+  "$projectDir/Sources/Windows/WindowAccess.swift" \
+  "$projectDir/Sources/Windows/EnhancementSettings.swift" \
+  "$projectDir/Sources/Dock/DockPolicy.swift" \
+  "$projectDir/Sources/Dock/WindowPreviewCapture.swift" \
+  "$projectDir/Sources/Dock/DockPreviewPanel.swift" \
+  "$projectDir/Sources/Dock/DockController.swift" \
   "$projectDir/Sources/main.swift" \
   -o "$executable"
 
-xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 \
-  "$projectDir/Sources/IconSwitcher/main.swift" -o "$iconSwitcher"
+xcrun swiftc -swift-version 5 -O -target arm64-apple-macos26.0 -framework Security -framework CryptoKit \
+  "$projectDir/Sources/IconSwitcher/CodeSignature.swift" "$projectDir/Sources/IconSwitcher/main.swift" -o "$iconSwitcher"
 
 makeIcns() {
   local source="$1"
@@ -61,12 +73,24 @@ if [ ! -f "$iconOptionsDestination/$selectedIcon.icns" ]; then selectedIcon="opt
 cp "$iconOptionsDestination/$selectedIcon.icns" "$stagedApp/Contents/Resources/AppIcon.icns"
 
 "$executable" --self-test
-codesign --force --deep --options runtime --sign - --identifier com.ares.cmd.tab "$stagedApp"
+codesign --force --options runtime --sign "$signingIdentity" "$iconSwitcher"
+codesign --force --options runtime --sign "$signingIdentity" --identifier com.ares.cmd.tab "$stagedApp"
 codesign --verify --deep --strict "$stagedApp"
 
 if [ "${CMD_TAB_PRO_BUILD_ONLY:-0}" = "1" ]; then
   echo "Built app: $stagedApp"
   exit 0
+fi
+
+if [ -e "$installedApp" ]; then
+  installedSignature="$(codesign -dv "$installedApp" 2>&1)"
+  if [[ "$installedSignature" != *"Signature=adhoc"* ]]; then
+    installedRequirement="$(codesign -d -r- "$installedApp" 2>&1 | sed -n 's/^designated => //p')"
+    if [ -z "$installedRequirement" ] || ! codesign --verify --deep --strict -R "=$installedRequirement" "$stagedApp"; then
+      echo "Signing identity changed. Existing app was kept; restore its signing identity before installing." >&2
+      exit 1
+    fi
+  fi
 fi
 
 "$executable" --terminate-running

@@ -27,7 +27,7 @@ final class DashboardWindowController: NSWindowController {
     private let tabViewController: DashboardTabViewController
     private var hasCentered = false
 
-    init(statistics: SwitchStatisticsStore, isReopenEnabled: @escaping () -> Bool,
+    init(statistics: SwitchStatisticsStore, enhancements: EnhancementSettings, isReopenEnabled: @escaping () -> Bool,
          setReopenEnabled: @escaping (Bool) -> Void, loginStatus: @escaping () -> SMAppService.Status,
          setLoginEnabled: @escaping (Bool) throws -> Void, interfaceTheme: @escaping () -> InterfaceTheme,
          setInterfaceTheme: @escaping (InterfaceTheme) -> Void, menuBarIconVisible: @escaping () -> Bool,
@@ -36,7 +36,7 @@ final class DashboardWindowController: NSWindowController {
          openReleases: @escaping () -> Void, reopenMode: @escaping () -> ReopenMode,
          setReopenMode: @escaping (ReopenMode) -> Void, restoreDefaults: @escaping () -> Void) {
         tabViewController = DashboardTabViewController(
-            statistics: statistics, isReopenEnabled: isReopenEnabled, setReopenEnabled: setReopenEnabled,
+            statistics: statistics, enhancements: enhancements, isReopenEnabled: isReopenEnabled, setReopenEnabled: setReopenEnabled,
             loginStatus: loginStatus, setLoginEnabled: setLoginEnabled, interfaceTheme: interfaceTheme,
             setInterfaceTheme: setInterfaceTheme, menuBarIconVisible: menuBarIconVisible,
             setMenuBarIconVisible: setMenuBarIconVisible, appIconOption: appIconOption,
@@ -44,7 +44,7 @@ final class DashboardWindowController: NSWindowController {
             reopenMode: reopenMode, setReopenMode: setReopenMode,
             restoreDefaults: restoreDefaults
         )
-        let contentSize = NSSize(width: 420, height: 460)
+        let contentSize = NSSize(width: 680, height: 620)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false
@@ -54,7 +54,8 @@ final class DashboardWindowController: NSWindowController {
         window.setContentSize(contentSize)
         window.contentMinSize = contentSize
         window.contentMaxSize = contentSize
-        window.backgroundColor = .textBackgroundColor
+        window.isOpaque = false
+        window.backgroundColor = .windowBackgroundColor
         window.title = "Cmd Tab Pro"
         window.titleVisibility = .hidden
         window.toolbarStyle = .expanded
@@ -68,7 +69,7 @@ final class DashboardWindowController: NSWindowController {
     }
 
     func showAbout() {
-        show(selectedTab: 2)
+        show(selectedTab: 3)
     }
 
     func refresh() {
@@ -92,8 +93,9 @@ private final class DashboardTabViewController: NSTabViewController {
     private let generalViewController: GeneralViewController
     private let statisticsViewController: StatisticsViewController
     private let aboutViewController: AboutViewController
+    private let enhancementsViewController: EnhancementsViewController
 
-    init(statistics: SwitchStatisticsStore, isReopenEnabled: @escaping () -> Bool,
+    init(statistics: SwitchStatisticsStore, enhancements: EnhancementSettings, isReopenEnabled: @escaping () -> Bool,
          setReopenEnabled: @escaping (Bool) -> Void, loginStatus: @escaping () -> SMAppService.Status,
          setLoginEnabled: @escaping (Bool) throws -> Void, interfaceTheme: @escaping () -> InterfaceTheme,
          setInterfaceTheme: @escaping (InterfaceTheme) -> Void, menuBarIconVisible: @escaping () -> Bool,
@@ -113,9 +115,11 @@ private final class DashboardTabViewController: NSTabViewController {
             statistics: statistics, appIconOption: appIconOption, diagnosticText: diagnosticText, openReleases: openReleases,
             restoreDefaults: restoreDefaults
         )
+        enhancementsViewController = EnhancementsViewController(settings: enhancements)
         super.init(nibName: nil, bundle: nil)
         tabStyle = .toolbar
-        addTab("通用", symbol: "gearshape", viewController: generalViewController)
+        addTab("切换设置", symbol: "rectangle.2.swap", viewController: generalViewController)
+        addTab("Dock 预览", symbol: "dock.rectangle", viewController: enhancementsViewController)
         addTab("统计", symbol: "chart.bar.xaxis", viewController: statisticsViewController)
         addTab("关于", symbol: "info.circle", viewController: aboutViewController)
         selectedTabViewItemIndex = 0
@@ -126,8 +130,9 @@ private final class DashboardTabViewController: NSTabViewController {
     func refreshSelectedTab() {
         switch selectedTabViewItemIndex {
         case 0: generalViewController.refresh()
-        case 1: statisticsViewController.refresh()
-        case 2: aboutViewController.refresh()
+        case 1: enhancementsViewController.refresh()
+        case 2: statisticsViewController.refresh()
+        case 3: aboutViewController.refresh()
         default: break
         }
     }

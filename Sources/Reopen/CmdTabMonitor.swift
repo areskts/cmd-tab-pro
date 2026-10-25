@@ -20,22 +20,49 @@ enum ReopenMode: String, CaseIterable {
     }
 }
 
+struct CmdTabSession {
+    private var commandDown = false
+    private var tabUsed = false
+
+    mutating func flagsChanged(command: Bool) -> Bool {
+        let completed = commandDown && !command && tabUsed
+        commandDown = command
+        if !command { tabUsed = false }
+        return completed
+    }
+
+    mutating func keyDown(code: Int64, command: Bool) -> Bool {
+        commandDown = command
+        if command, code == 48 {
+            let startsSession = !tabUsed
+            tabUsed = true
+            return startsSession
+        }
+        if tabUsed, command, [Int64(50), 123, 124].contains(code) { return false }
+        tabUsed = false
+        return true
+    }
+}
+
 final class CmdTabMonitor {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var commandDown = false
-    private var tabUsedInSession = false
+    private var session = CmdTabSession()
     private let onCompleted: () -> Void
+    private let onInterrupted: () -> Void
 
-    init(onCompleted: @escaping () -> Void) {
+    init(onCompleted: @escaping () -> Void, onInterrupted: @escaping () -> Void = {}) {
         self.onCompleted = onCompleted
+        self.onInterrupted = onInterrupted
     }
 
     func start() -> Bool {
         guard eventTap == nil else { return true }
         guard CGPreflightListenEventAccess() else { return false }
         let eventMask = (1 << CGEventType.keyDown.rawValue) |
-            (1 << CGEventType.flagsChanged.rawValue)
+            (1 << CGEventType.flagsChanged.rawValue) |
+            (1 << CGEventType.leftMouseDown.rawValue) |
+            (1 << CGEventType.rightMouseDown.rawValue)
         let context = Unmanaged.passUnretained(self).toOpaque()
         guard let eventTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
@@ -61,25 +88,25 @@ final class CmdTabMonitor {
         CGEvent.tapEnable(tap: eventTap, enable: false)
         if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
         self.runLoopSource = nil
+        CFMachPortInvalidate(eventTap)
         self.eventTap = nil
-        commandDown = false
-        tabUsedInSession = false
+        session = CmdTabSession()
     }
 
     private func handle(type: CGEventType, event: CGEvent) {
         switch type {
         case .flagsChanged:
-            let isCommandDown = event.flags.contains(.maskCommand)
-            // macOS 常见顺序是先松 Tab、后松 Command，按会话是否使用过 Tab 判断结束。
-            if commandDown && !isCommandDown && tabUsedInSession {
-                onCompleted()
-                tabUsedInSession = false
-            }
-            commandDown = isCommandDown
+            if session.flagsChanged(command: event.flags.contains(.maskCommand)) { onCompleted() }
         case .keyDown:
-            guard commandDown else { return }
-            if event.getIntegerValueField(.keyboardEventKeycode) == 48 { tabUsedInSession = true }
+            if session.keyDown(code: event.getIntegerValueField(.keyboardEventKeycode), command: event.flags.contains(.maskCommand)) {
+                onInterrupted()
+            }
+        case .leftMouseDown, .rightMouseDown:
+            session = CmdTabSession()
+            onInterrupted()
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            session = CmdTabSession()
+            onInterrupted()
             if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
         default:
             break

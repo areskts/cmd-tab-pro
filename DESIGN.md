@@ -24,8 +24,9 @@
 10. 统计只保存在本机，并自动淘汰 7 天前的数据。
 11. 用户可以清除全部统计，复制不包含使用记录的诊断信息，并恢复部分默认设置。
 12. 用户主动操作时可以打开 GitHub Releases，不进行后台更新检查。
-13. 主页面使用“通用”“统计”“关于”三个原生工具栏页签。
-14. 当前 ad-hoc 分发版本支持在三套内置图标之间切换。
+13. 主页面依次使用“切换设置”“Dock 预览”“统计”“关于”四个原生工具栏页签，图标分别对应应用切换、Dock、统计图表和信息说明。
+14. 支持在三套内置图标之间切换，重签名必须沿用原签名身份；证书或私钥不可用时保留原应用。
+15. 用户于 2026-10-24 确认加入可选的已有窗口恢复、Dock 预览和点击最小化；不制作键盘端同 App 多窗口选择器，不增加顶部手势和分屏。
 
 ## 3. 运行链路
 
@@ -50,17 +51,17 @@
           |
           +---- 没有窗口：创建默认窗口并前置
 
-兼容模式也会在 Dock、Spotlight 或其他方式激活应用时执行相同行为。增强自动模式使用被动事件监听识别 Cmd+Tab 结束，并在发送 reopen 前确认目标应用没有顶层窗口。Finder 例外：有可见窗口时不发送多余 reopen，没有可见窗口时仍允许唤回。
+兼容模式也会在 Dock、Spotlight 或其他方式激活应用时执行相同行为，但跳过 Finder。增强自动模式使用被动事件监听识别 Cmd+Tab 结束，并在发送 reopen 前确认目标应用没有顶层窗口，包括 Finder。
 
 同一个激活通知也用于本地统计。统计记录目标 App 的 Bundle ID、显示名称和次数，不记录窗口标题或内容。reopen 可能再次触发激活通知，因此同一 PID 在 0.5 秒内只统计一次。
 
-## 4. 为什么兼容模式只对 Finder 检查可见窗口
+## 4. 为什么兼容模式跳过 Finder
 
 通用窗口数量检查需要 Accessibility，首次运行必须由用户手动授权，而且 macOS 可能让授权前已启动的进程继续看到旧权限状态。这与“安装后直接使用”的目标冲突。
 
-兼容模式只对 Finder 使用公共 CGWindowList 查询当前屏幕上的顶层窗口，避免已打开的 Finder 被重复唤回。增强自动模式会在 Cmd+Tab 完成时对目标应用查询顶层窗口，用于区分页签关闭和窗口关闭；这个查询不维护窗口列表。
+点击桌面也会激活 Finder，兼容模式无法从应用激活通知区分这次操作与主动切回 Finder，因此不向 Finder 发送 reopen。增强自动模式会在 Cmd+Tab 完成时对目标应用查询顶层窗口，用于区分页签关闭和窗口关闭；这个查询不维护窗口列表。
 
-其他应用仍由 reopen 入口决定“已有窗口如何处理、没有窗口如何创建”。Finder 的可见窗口判断只用于避免已打开窗口时重复请求。
+兼容模式的其他应用仍由 reopen 入口决定“已有窗口如何处理、没有窗口如何创建”。
 
 ## 5. 为什么使用废弃的 LaunchServices 入口
 
@@ -76,10 +77,10 @@
 
 - 不接管 Cmd+Tab 键盘事件
 - 不使用 SkyLight 私有快捷键 API
-- 不维护窗口列表
-- 兼容模式不使用 Accessibility；增强自动模式不依赖 Accessibility 窗口树
-- 不识别 Space、屏幕和标签页
-- 不显示缩略图或自定义切换面板
+- 不维护全局窗口清单；窗口增强按需读取目标 App 的窗口，并通过事件更新
+- 基础兼容模式不使用 Accessibility；窗口与 Dock 增强按需申请辅助功能、屏幕录制权限
+- 不移动窗口到其他 Space，不增加浏览器标签页管理
+- 不替换系统切换面板；Dock 预览作为独立的可选面板
 - 不增加应用白名单、黑名单或应用级配置
 - 不引入第三方库、后台网络、遥测和自动更新系统
 
@@ -88,15 +89,29 @@
 应用是 LSUIElement 菜单栏工具，不显示 Dock 图标，主页面按需显示。
 
 正常手动启动或再次打开 App 时展示主页面；登录时自动启动保持菜单栏常驻，不主动弹出窗口。关闭主页面不会退出应用。
+登录启动通过 open-application Apple event 的 `keyAEPropData == keyAELaunchedAsLogInItem` 识别；即使启动通知标记为默认启动，也不显示主页面。
 原生主菜单注册 Cmd+W 关闭主页面和 Cmd+Q 退出应用。增强自动模式使用被动键盘监听，不修改或吞掉系统快捷键。
 
-主页面使用 AppKit 原生窗口、NSTabViewController、NSSwitch、NSPopUpButton、系统字体和动态颜色。页面底色与浅灰功能块分层，分组标题放在功能块外。
+主页面使用 AppKit 原生窗口、NSTabViewController、NSSwitch、NSPopUpButton、系统字体和动态颜色。设置页统一使用 NSVisualEffectView 的 underWindowBackground 材质，卡片采用系统 controlBackgroundColor 和 separatorColor；分组标题放在功能块外。页签顺序为切换设置、Dock 预览、统计、关于。
 
-主窗口内容区固定为 420 × 460，暂不提供自由缩放。开关使用紧凑尺寸，三套图标在同一行显示。
+主窗口内容区固定为 680 × 620，暂不提供自由缩放。保留四个工具栏页签；页面标题 24pt、设置标题 14pt、说明 12pt，控件使用标准尺寸。统一圆角分组、留白和行高，较长页面在固定宽度内纵向滚动，三套图标在同一行显示。
 
-通用页提供自动唤回、唤回模式、开机自启动、界面主题、菜单栏图标和应用图标设置。统计页展示今日计数、7 天合计、7 天柱状图和 Top 5 App。关于页展示版本和 Bundle ID，并提供复制诊断信息、清除统计、恢复默认设置和检查更新。清除统计与恢复默认设置都必须二次确认。
+切换设置页提供自动唤回、唤回模式、开机自启动、界面主题、菜单栏图标和应用图标设置。Dock 预览页提供窗口恢复、Dock 面板、点击最小化和权限状态。统计页展示今日计数、7 天合计、7 天柱状图和 Top 5 App。关于页展示版本和 Bundle ID，并提供复制诊断信息、清除统计、恢复默认设置和检查更新。清除统计与恢复默认设置都必须二次确认。
 
 诊断信息只包含运行环境和功能状态，不包含 App 名称、切换次数或其他统计记录。检查更新只打开 GitHub Releases。
+
+授权状态展示窗口控制、屏幕录制和输入监控三项系统权限，按两列对齐；已授权使用系统绿色圆形勾选图标，悬停及读屏保留状态说明。输入监控提供独立授权按钮，明确仅增强自动模式需要；授权请求后显式打开输入监控设置页，避免系统不再弹提示时点击无反馈。刷新授权状态不改变当前唤回模式。未授权及标签模式无需录屏继续显示具体文字。Dock 面板和点击最小化的运行状态保留在诊断信息中。
+
+新增功能的行为和权限见 [窗口恢复规格](Sources/Windows/WindowSpecs.md)、[Dock 规格](Sources/Dock/DockSpecs.md) 和 [Cmd+Tab 会话规格](Sources/Reopen/CmdTabMonitorSpecs.md)。
+
+### 系统玻璃材质
+
+- 设置窗口使用非不透明窗口和原生背景材质，四个工具栏页签由系统管理 Liquid Glass，内容卡片保持清晰的阅读层级。
+- Dock 面板使用 NSGlassEffectView regular，将实际内容放入 contentView，避免用旧式 popover 模糊或自绘色块模拟玻璃。macOS 27 的 effectIsInteractive 通过版本检查启用，最低系统仍为 macOS 26。
+- 菜单、确认框、开关、下拉框采用原生 AppKit 控件，不覆盖系统的材质和交互。减少透明度、增强对比度和减少动态效果由系统组件适配，不增加独立的玻璃强度设置或自绘动画。
+- 设置布局在浅色、深色及对应的高对比度外观下检查；合成器中的真实玻璃需在运行窗口中验收，离屏位图只能检查布局。
+
+依据：[Apple：Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass)、[AppKit：NSGlassEffectView](https://developer.apple.com/documentation/appkit/nsglasseffectview)。
 
 菜单仅提供：
 
@@ -115,7 +130,7 @@
 
 项目独立位于：
 
-    /Users/wujunjie/Documents/ai_workspace/alt-tab/cmd-tab-pro
+    cmd-tab-pro/
 
 不属于 alt-tab-macos 仓库，也不依赖 AltTab 源码。
 
@@ -126,24 +141,20 @@
 - 纯代码 UI，不使用 Interface Builder
 - 最低系统版本 macOS 26
 - 使用 xcrun swiftc 编译，不创建 Xcode 工程或 Swift Package
-- 本地安装使用 ad-hoc 签名并启用 hardened runtime
+- 本地安装优先复用配置的固定代码签名身份，未配置时使用 ad-hoc；启用 hardened runtime
 - 仅构建 Apple Silicon arm64
 - 固定 bundle ID：com.ares.cmd.tab
 
-核心实现文件：
+核心模块：
 
-1. Sources/main.swift
-2. Sources/Statistics/SwitchStatistics.swift
-3. Sources/Appearance/AppIconOption.swift
-4. Sources/Dashboard/DashboardWindowController.swift
-5. Sources/Dashboard/DashboardStyle.swift
-6. Sources/Dashboard/GeneralViewController.swift
-7. Sources/Dashboard/StatisticsViewController.swift
-8. Sources/Dashboard/AboutViewController.swift
-9. Sources/IconSwitcher/main.swift
-10. Resources/Info.plist
-11. scripts/install.sh
-12. scripts/package-release.sh
+- `Sources/main.swift`：应用生命周期、菜单栏、登录启动和模块连接。
+- `Sources/Reopen/`：原生 Cmd+Tab 会话识别、延迟目标选择和窗口唤回。
+- `Sources/Windows/`：增强设置、AX 窗口查询与控制、窗口恢复规则。
+- `Sources/Dock/`：Dock 命中与交互、悬浮面板和按需缩略图。
+- `Sources/Dashboard/`：四个设置页面及共用样式。
+- `Sources/Statistics/`：本地切换统计。
+- `Sources/Appearance/`、`Sources/IconSwitcher/`：应用图标、签名身份校验与安全替换。
+- `Resources/Info.plist`、`scripts/`：版本、安装、固定本机签名与公开打包。
 
 ## 9. 安装
 
@@ -152,7 +163,7 @@ scripts/install.sh 负责：
 1. 校验 Info.plist。
 2. 编译 arm64 Release 可执行文件。
 3. 运行内置决策自检。
-4. 组装并 ad-hoc 签名 CmdTabPro.app。
+4. 组装应用，使用配置的签名身份签名；更新证书版时验证候选符合原指定要求。
 5. 正常终止已安装的旧版本。
 6. 失败时恢复旧 app bundle。
 7. 安装到 /Applications/CmdTabPro.app 并启动。
@@ -165,12 +176,15 @@ scripts/install.sh 负责：
 
 发布脚本使用 build-only 模式并固定选择方案 2，只生成暂存 App、ZIP 和校验文件，不终止、覆盖或启动本机已经安装的应用。
 
-运行时图标切换依赖修改 App bundle 和重新签名，只适用于当前 ad-hoc 分发方式。如果以后改用 Developer ID 和公证，应取消这项运行时能力，避免破坏签名。
+运行时图标切换依赖修改 App bundle 和重新签名，支持 ad-hoc 或本机能使用原私钥的证书签名；签名失败或身份变化时保留原应用。如果以后改用 Developer ID 和公证，应取消这项运行时能力，避免破坏签名。
 
 ## 10. 验证
 
 ### 内置自检
 
+- 手动启动显示主页面；登录项启动在默认启动标记为 true 或缺失时均保持后台运行。
+- 非默认启动保持后台运行；缺少启动元数据时允许手动进入主页面。
+- 兼容模式下 Finder 激活不触发 reopen，其他应用继续唤回；增强自动模式允许通过 Cmd+Tab 唤回无窗口的 Finder。
 - 普通前台应用允许 reopen。
 - 已切到后台的应用不处理。
 - 0.5 秒冷却内不重复处理。
@@ -202,20 +216,20 @@ scripts/install.sh 负责：
 
 ### 界面验收
 
-- 主窗口内容区固定为 420 × 460，不显示缩放入口。
-- 三个工具栏页签均可切换，没有文字、数字或按钮裁切。
+- 主窗口内容区固定为 680 × 620，不显示缩放入口；长页面可以滚动至最后一项。
+- 四个工具栏页签均可切换，没有文字、数字或按钮裁切。
 - 浅色主题使用白色页面底和浅灰功能块，深色主题保持对应层级。
-- 三套图标在通用页同一行完整显示，选中项有高亮边框。
+- 三套图标在切换设置页同一行完整显示，选中项有高亮边框。
 - Cmd+W 关闭窗口但保留进程，Cmd+Q 退出应用。
 - 唤回模式可以选择兼容模式或增强自动模式；增强自动模式需要输入监控权限，未获授权时继续使用兼容模式。
-- Finder 有可见窗口时不重复唤回，没有可见窗口时可以唤回。
+- 兼容模式下关闭应用最后一个窗口后点击桌面，不自动打开 Finder；增强自动模式下通过 Cmd+Tab 切回无窗口的 Finder 时可以唤回，有可见窗口时不重复唤回。
 - 恢复默认设置只恢复自动唤回、菜单栏图标和界面主题，不影响统计、登录项和应用图标。
 
 ## 11. 风险与边界
 
 最脆弱的假设是目标应用正确实现 reopen。规范 AppKit 应用会根据 hasVisibleWindows 决定是否创建窗口；部分跨平台应用可能忽略 reopen，或在已有窗口时错误地创建新窗口。
 
-Finder 的窗口判断是兼容模式下的内置应用特例。增强自动模式会在实际发送 reopen 前查询目标 App 的顶层窗口，以避免把 Chrome 页签关闭误判为窗口关闭。
+兼容模式不自动唤回 Finder，因此通过 Cmd+Tab 切回无窗口的 Finder 也不会创建窗口。增强自动模式会在实际发送 reopen 前查询目标 App 的顶层窗口，以避免把 Chrome 页签关闭误判为窗口关闭。
 
 统计无法区分 Cmd+Tab、Dock、Spotlight 和鼠标点击，只能准确识别成为前台的目标 App。页面文案明确使用“应用切换”，不把数据描述为“Cmd+Tab 次数”。
 
@@ -229,7 +243,7 @@ Finder 的窗口判断是兼容模式下的内置应用特例。增强自动模�
 
 ## 13. 开源准备
 
-仓库保持无第三方依赖，安装脚本、设计说明和行为边界全部随源码提供。公开发布前必须选择并添加 LICENSE；推荐 MIT，但许可证属于项目所有者决策，不在本次改名中代选。
+仓库保持无第三方依赖，安装脚本、设计说明和行为边界全部随源码提供，采用 PolyForm Noncommercial License 1.0.0，完整条款见 LICENSE。
 
 公开预编译包仅提供 macOS 26 arm64 ZIP，使用 ad-hoc 签名并接受 Gatekeeper 首次阻止，由用户在“隐私与安全性”中手动允许。发布包同时提供 SHA-256 校验文件。若以后要求无提示安装，再改用 Developer ID Application 签名和 notarization。
 

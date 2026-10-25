@@ -1,5 +1,7 @@
 import AppKit
+import ApplicationServices
 import CoreGraphics
+import CoreServices
 import Darwin
 import ServiceManagement
 import os
@@ -8,38 +10,11 @@ private let bundleIdentifier = "com.ares.cmd.tab"
 private let logger = Logger(subsystem: bundleIdentifier, category: "reopen")
 private let releasesURL = URL(string: "https://github.com/areskts/cmd-tab-pro/releases/latest")!
 
-private func shouldAttemptReopen(enabled: Bool, regular: Bool, terminated: Bool,
-                                 ownProcess: Bool, frontmost: Bool, coolingDown: Bool,
-                                 excluded: Bool = false) -> Bool {
-    enabled && regular && !terminated && !ownProcess && frontmost && !coolingDown && !excluded
-}
-
-private func shouldSkipFinderReopen(bundleIdentifier: String?, hasVisibleWindow: Bool) -> Bool {
-    bundleIdentifier == "com.apple.finder" && hasVisibleWindow
-}
-
-private func hasVisibleWindow(for processIdentifier: pid_t) -> Bool {
-    let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-    return windows.contains { window in
-        guard let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t, ownerPID == processIdentifier else { return false }
-        return (window[kCGWindowLayer as String] as? Int) == 0
-    }
-}
-
-private func isVisibleTopLevelWindow(_ window: [String: Any], processIdentifier: pid_t) -> Bool {
-    guard let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t, ownerPID == processIdentifier,
-          (window[kCGWindowLayer as String] as? Int) == 0,
-          (window[kCGWindowIsOnscreen as String] as? Bool) == true,
-          let bounds = window[kCGWindowBounds as String] as? [String: Any],
-          let width = bounds["Width"] as? CGFloat, let height = bounds["Height"] as? CGFloat else { return false }
-    return width > 0 && height > 0
-}
-
-private func hasTopLevelWindow(for processIdentifier: pid_t) -> Bool {
-    let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-    return windows.contains { window in
-        isVisibleTopLevelWindow(window, processIdentifier: processIdentifier)
-    }
+private func shouldShowDashboardOnLaunch(defaultLaunch: Bool?, event: NSAppleEventDescriptor?) -> Bool {
+    guard defaultLaunch ?? true else { return false }
+    guard let event, event.eventClass == kCoreEventClass, event.eventID == kAEOpenApplication else { return true }
+    // Login-item launches carry their origin in the open-application Apple event.
+    return event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue != keyAELaunchedAsLogInItem
 }
 
 private func runSelfTest() {
@@ -49,6 +24,22 @@ private func runSelfTest() {
             exit(1)
         }
     }
+    let launchEvent = NSAppleEventDescriptor.appleEvent(
+        withEventClass: AEEventClass(kCoreEventClass), eventID: AEEventID(kAEOpenApplication),
+        targetDescriptor: nil, returnID: AEReturnID(kAutoGenerateReturnID),
+        transactionID: AETransactionID(kAnyTransactionID)
+    )
+    expect(shouldShowDashboardOnLaunch(defaultLaunch: true, event: launchEvent),
+           "manual launch should show dashboard")
+    expect(shouldShowDashboardOnLaunch(defaultLaunch: nil, event: nil),
+           "launch without metadata should show dashboard")
+    expect(!shouldShowDashboardOnLaunch(defaultLaunch: false, event: launchEvent),
+           "non-default launch must stay in background")
+    launchEvent.setParam(NSAppleEventDescriptor(enumCode: OSType(keyAELaunchedAsLogInItem)), forKeyword: keyAEPropData)
+    expect(!shouldShowDashboardOnLaunch(defaultLaunch: true, event: launchEvent),
+           "login-item launch must stay in background even when marked as default")
+    expect(!shouldShowDashboardOnLaunch(defaultLaunch: nil, event: launchEvent),
+           "login-item launch must stay in background without default-launch metadata")
     let ready = (enabled: true, regular: true, terminated: false,
                  ownProcess: false, frontmost: true, coolingDown: false)
     expect(shouldAttemptReopen(enabled: ready.enabled, regular: ready.regular,
@@ -67,142 +58,42 @@ private func runSelfTest() {
                                 terminated: ready.terminated, ownProcess: ready.ownProcess,
                                 frontmost: ready.frontmost, coolingDown: false, excluded: true),
            "excluded apps must not reopen")
-    expect(shouldSkipFinderReopen(bundleIdentifier: "com.apple.finder", hasVisibleWindow: true),
-           "Finder with a visible window must not reopen")
-    expect(!shouldSkipFinderReopen(bundleIdentifier: "com.apple.finder", hasVisibleWindow: false),
-           "windowless Finder should reopen")
-    expect(!shouldSkipFinderReopen(bundleIdentifier: "com.example.app", hasVisibleWindow: true),
-           "other apps must not use Finder filtering")
+    expect(shouldSkipFinderReopen(bundleIdentifier: "com.apple.finder", fromCmdTab: false),
+           "desktop activation must not open a Finder window in compatible mode")
+    expect(!shouldSkipFinderReopen(bundleIdentifier: "com.apple.finder", fromCmdTab: true),
+           "Cmd+Tab must still allow windowless Finder to reopen")
+    expect(!shouldSkipFinderReopen(bundleIdentifier: "com.example.app", fromCmdTab: false),
+           "compatible mode must still allow other apps to reopen")
+    expect(!shouldSkipFinderReopen(bundleIdentifier: "com.example.app", fromCmdTab: true),
+           "automatic mode must still allow other apps to reopen")
     let hiddenWindow: [String: Any] = [
         kCGWindowOwnerPID as String: pid_t(7), kCGWindowLayer as String: 0,
         kCGWindowIsOnscreen as String: false,
         kCGWindowBounds as String: ["Width": CGFloat(100), "Height": CGFloat(100)]
     ]
-    expect(!isVisibleTopLevelWindow(hiddenWindow, processIdentifier: 7),
-           "hidden windows must not block automatic reopen")
+    expect(isTopLevelWindow(hiddenWindow, processIdentifier: 7),
+           "an existing off-screen window must prevent creating a duplicate window")
     var visibleWindow = hiddenWindow
     visibleWindow[kCGWindowIsOnscreen as String] = true
-    expect(isVisibleTopLevelWindow(visibleWindow, processIdentifier: 7),
+    expect(isTopLevelWindow(visibleWindow, processIdentifier: 7),
            "visible top-level windows must block duplicate reopen")
+    visibleWindow[kCGWindowBounds as String] = ["Width": CGFloat(0), "Height": CGFloat(0)]
+    expect(!isTopLevelWindow(visibleWindow, processIdentifier: 7), "zero-size placeholders are not ordinary windows")
     print("self-test passed")
-}
-
-private final class ReopenController {
-    private let workspace = NSWorkspace.shared
-    private let ownPid = ProcessInfo.processInfo.processIdentifier
-    private let statistics: SwitchStatisticsStore
-    private let defaults: UserDefaults
-    private var observer: NSObjectProtocol?
-    private var cooldownUntil = [pid_t: TimeInterval]()
-    private var countedUntil = [pid_t: TimeInterval]()
-    private lazy var cmdTabMonitor = CmdTabMonitor { [weak self] in self?.cmdTabCompleted() }
-    private(set) var isEnabled: Bool
-    private(set) var mode: ReopenMode
-
-    init(statistics: SwitchStatisticsStore, defaults: UserDefaults = .standard) {
-        self.statistics = statistics
-        self.defaults = defaults
-        isEnabled = defaults.object(forKey: "reopenEnabled") as? Bool ?? true
-        mode = ReopenMode(rawValue: defaults.string(forKey: "reopenMode") ?? ReopenMode.automatic.rawValue) ?? .automatic
-    }
-
-    func start() {
-        observer = workspace.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] notification in
-            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-            self?.applicationActivated(app)
-        }
-        guard mode == .automatic else { return }
-        if cmdTabMonitor.start() {
-            logger.info("automatic mode active")
-        } else {
-            logger.error("automatic mode unavailable: input monitoring permission is missing")
-            mode = .compatible
-            defaults.set(mode.rawValue, forKey: "reopenMode")
-            CGRequestListenEventAccess()
-        }
-    }
-
-    private func applicationActivated(_ app: NSRunningApplication) {
-        guard app.activationPolicy == .regular, !app.isTerminated, app.processIdentifier != ownPid else { return }
-        recordSwitch(app)
-        guard isEnabled, mode == .compatible else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150)) { [weak self] in
-            guard let self else { return }
-            self.reopenIfNeeded(app, requireWindowless: false)
-        }
-    }
-
-    func setEnabled(_ enabled: Bool) {
-        isEnabled = enabled
-        defaults.set(enabled, forKey: "reopenEnabled")
-    }
-
-    func setMode(_ mode: ReopenMode) -> Bool {
-        if mode == .automatic {
-            guard cmdTabMonitor.start() else {
-                CGRequestListenEventAccess()
-                return false
-            }
-        } else {
-            cmdTabMonitor.stop()
-        }
-        self.mode = mode
-        defaults.set(mode.rawValue, forKey: "reopenMode")
-        return true
-    }
-
-    private func cmdTabCompleted() {
-        guard mode == .automatic else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150)) { [weak self] in
-            guard let self, let app = self.workspace.frontmostApplication else { return }
-            self.reopenIfNeeded(app, requireWindowless: true)
-        }
-    }
-
-    private func recordSwitch(_ app: NSRunningApplication) {
-        let now = ProcessInfo.processInfo.systemUptime
-        countedUntil = countedUntil.filter { $0.value > now }
-        let pid = app.processIdentifier
-        guard (countedUntil[pid] ?? 0) <= now else { return }
-        countedUntil[pid] = now + 0.5
-        let name = app.localizedName ?? "未知应用"
-        statistics.record(bundleIdentifier: app.bundleIdentifier ?? "name:\(name)", displayName: name)
-    }
-
-    private func reopenIfNeeded(_ app: NSRunningApplication, requireWindowless: Bool) {
-        let now = ProcessInfo.processInfo.systemUptime
-        cooldownUntil = cooldownUntil.filter { $0.value > now }
-        let pid = app.processIdentifier
-        let coolingDown = (cooldownUntil[pid] ?? 0) > now
-        let frontmost = workspace.frontmostApplication?.processIdentifier == pid
-        let hasWindow = requireWindowless && hasTopLevelWindow(for: pid)
-        let finderHasVisibleWindow = app.bundleIdentifier == "com.apple.finder" && hasVisibleWindow(for: pid)
-        guard shouldAttemptReopen(
-            enabled: isEnabled, regular: app.activationPolicy == .regular,
-            terminated: app.isTerminated, ownProcess: pid == ownPid, frontmost: frontmost,
-            coolingDown: coolingDown,
-            excluded: hasWindow || shouldSkipFinderReopen(bundleIdentifier: app.bundleIdentifier, hasVisibleWindow: finderHasVisibleWindow)
-        ), let bundleURL = app.bundleURL else { return }
-        cooldownUntil[pid] = now + 0.5
-        do {
-            // 2026-08-31 / macOS 26.5.2：现代 openApplication 和 /usr/bin/open 对已经前台的
-            // 无窗口应用只返回成功，不投递 reopen；这个旧入口会投递，AltTab 也依赖同一路径。
-            _ = try workspace.launchApplication(at: bundleURL, configuration: [:])
-            logger.info("reopen requested pid=\(pid, privacy: .public)")
-        } catch {
-            logger.error("reopen failed pid=\(pid, privacy: .public): \(error.localizedDescription, privacy: .public)")
-        }
-    }
 }
 
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statistics = SwitchStatisticsStore()
-    private lazy var controller = ReopenController(statistics: statistics)
+    private let access = WindowAccess()
+    private let enhancements = EnhancementSettings()
+    private lazy var controller = ReopenController(statistics: statistics, access: access, enhancements: enhancements)
+    private lazy var dock = DockController(access: access, settings: enhancements) { [weak self] pid in
+        self?.controller.suppressWindowAction(pid: pid)
+    }
     private lazy var cachedAppIconOption = AppIconOption.current()
     private lazy var dashboard = DashboardWindowController(
         statistics: statistics,
+        enhancements: enhancements,
         isReopenEnabled: { [weak self] in self?.controller.isEnabled ?? false },
         setReopenEnabled: { [weak self] enabled in self?.setReopenEnabled(enabled) },
         loginStatus: { SMAppService.mainApp.status },
@@ -234,10 +125,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         setupMainMenu()
         setupMenu()
         statusItem.isVisible = menuBarIconVisible()
+        enhancements.onChange = { [weak self] in self?.configureEnhancements() }
         controller.start()
+        configureEnhancements()
         let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool
-        logger.info("launch default=\(defaultLaunch ?? true, privacy: .public)")
-        if defaultLaunch ?? true { dashboard.showDashboard() }
+        let showDashboard = shouldShowDashboardOnLaunch(
+            defaultLaunch: defaultLaunch, event: NSAppleEventManager.shared().currentAppleEvent
+        )
+        logger.info("launch showDashboard=\(showDashboard, privacy: .public)")
+        if showDashboard { dashboard.showDashboard() }
         showPendingIconSwitchError()
     }
 
@@ -336,16 +232,30 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
     func applicationDidBecomeActive(_ notification: Notification) {
         statusItem.isVisible = menuBarIconVisible()
+        configureEnhancements()
+        dashboard.refresh()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        dock.stop()
+        controller.cancelPending()
+    }
+
+    private func configureEnhancements() {
+        controller.cancelPending()
+        let active = controller.isEnabled && EnhancementFeature.allCases.contains(where: enhancements.enabled)
+        access.observeFocus(of: active ? NSWorkspace.shared.frontmostApplication : nil)
+        dock.configure(active: controller.isEnabled)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // LSUIElement 的 reopen 行为因启动入口而异，激活与 reopen 两条路径都恢复控制入口。
         dashboard.showDashboard()
         return false
     }
 
     private func setReopenEnabled(_ enabled: Bool) {
         controller.setEnabled(enabled)
+        configureEnhancements()
         refreshMenu()
         dashboard.refresh()
     }
@@ -454,7 +364,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             ProcessInfo.processInfo.operatingSystemVersionString,
             "Architecture: arm64",
             "Bundle ID: \(bundleIdentifier)",
+            "Signing identity: \(CodeSignature(Bundle.main.bundleURL)?.identity ?? "unavailable")",
             "Window reopen: \(controller.isEnabled ? "enabled" : "paused")",
+            "Reopen mode: \(controller.mode.rawValue)",
+            "Window recovery: \(enhancements.enabled(.windowRecovery))",
+            "Dock preview: \(enhancements.enabled(.dockPreview))",
+            "Dock click minimize: \(enhancements.enabled(.dockClickMinimize))",
+            "Accessibility: \(enhancements.accessibilityGranted)",
+            "Dock observer: \(enhancements.dockObserverAvailable)",
+            "Dock display style: \(enhancements.dockDisplayStyle.rawValue)",
+            "Screen capture: \(enhancements.screenCaptureGranted)",
             "Launch at login: \(loginStatusDescription(SMAppService.mainApp.status))",
             "Menu bar icon: \(menuBarIconVisible() ? "visible" : "hidden")",
             "Interface theme: \(interfaceTheme().rawValue)",

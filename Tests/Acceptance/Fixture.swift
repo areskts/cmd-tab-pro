@@ -1,16 +1,19 @@
 import AppKit
 import Darwin
 
-private let statePath = "/tmp/cmd-tab-pro-fixture-state"
-private let readyPath = "/tmp/cmd-tab-pro-fixture-ready"
-private let visibleReopenPath = "/tmp/cmd-tab-pro-fixture-visible-reopen"
+private let statePrefix = ProcessInfo.processInfo.environment["CMD_TAB_PRO_FIXTURE_PREFIX"] ?? "/tmp/cmd-tab-pro-fixture"
+private let statePath = statePrefix + "-state"
+private let readyPath = statePrefix + "-ready"
+private let visibleReopenPath = statePrefix + "-visible-reopen"
 
 private final class Delegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
+    private var windows = [NSWindow]()
     private var closeSignal: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         createWindow("opened")
+        if CommandLine.arguments.contains("--multiple-windows") { createWindow("opened") }
         signal(SIGUSR1, SIG_IGN)
         closeSignal = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
         closeSignal?.setEventHandler { [weak self] in
@@ -34,12 +37,13 @@ private final class Delegate: NSObject, NSApplicationDelegate {
 
     private func createWindow(_ state: String) {
         let window = NSWindow(contentRect: NSRect(x: 200, y: 200, width: 320, height: 180),
-                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "Cmd Tab Pro Acceptance Fixture"
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.title = "Cmd Tab Pro Acceptance Fixture \(windows.count + 1)"
         window.isReleasedWhenClosed = false
         window.animationBehavior = .none
         window.makeKeyAndOrderFront(nil)
         self.window = window
+        windows.append(window)
         try? state.write(toFile: statePath, atomically: true, encoding: .utf8)
     }
 }

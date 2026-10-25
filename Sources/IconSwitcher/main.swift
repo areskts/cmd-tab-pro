@@ -26,12 +26,12 @@ private func storeError(_ message: String) {
     defaults?.synchronize()
 }
 
-private func signAndVerify(_ appPath: String) -> Bool {
+private func signAndVerify(_ appPath: String, signature: CodeSignature) -> Bool {
     let signed = run("/usr/bin/codesign", [
-        "--force", "--deep", "--options", "runtime", "--sign", "-",
+        "--force", "--options", "runtime", "--sign", signature.identity,
         "--identifier", bundleIdentifier, appPath
     ]) == 0
-    return signed && verify(appPath)
+    return signed && verify(appPath) && (signature.identity == "-" || signature.matches(URL(fileURLWithPath: appPath)))
 }
 
 private func verify(_ appPath: String) -> Bool {
@@ -76,10 +76,11 @@ let stagedResourcesURL = stagedAppURL.appendingPathComponent("Contents/Resources
 let stagedSourceIconURL = stagedResourcesURL.appendingPathComponent("IconOptions/\(sourceIconURL.lastPathComponent)")
 let stagedDestinationIconURL = stagedResourcesURL.appendingPathComponent("AppIcon.icns")
 do {
+    guard let signature = CodeSignature(appURL) else { throw IconSwitchError.signingFailed }
     try fileManager.copyItem(at: appURL, to: stagedAppURL)
     try fileManager.removeItem(at: stagedDestinationIconURL)
     try fileManager.copyItem(at: stagedSourceIconURL, to: stagedDestinationIconURL)
-    guard signAndVerify(stagedAppURL.path) else { throw IconSwitchError.signingFailed }
+    guard signAndVerify(stagedAppURL.path, signature: signature) else { throw IconSwitchError.signingFailed }
     _ = try fileManager.replaceItemAt(
         appURL, withItemAt: stagedAppURL, backupItemName: backupName,
         options: [.usingNewMetadataOnly, .withoutDeletingBackupItem]

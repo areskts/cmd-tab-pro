@@ -11,7 +11,15 @@ activateExecutable="$buildDir/activate"
 stateFile="/tmp/cmd-tab-pro-fixture-state"
 readyFile="/tmp/cmd-tab-pro-fixture-ready"
 visibleReopenFile="/tmp/cmd-tab-pro-fixture-visible-reopen"
-expectTool="$1"
+expectTool="${1:-}"
+case "$expectTool" in
+  0|1|2) ;;
+  *) echo "Usage: $0 0|1|2 (automatic control / basic compatible / enhanced compatible)" >&2; exit 2 ;;
+esac
+cleanup() {
+  if [ -x "$activateExecutable" ]; then "$activateExecutable" com.ares.cmd.tab.fixture --terminate 2>/dev/null || true; fi
+}
+trap cleanup EXIT
 
 rm -rf "$buildDir"
 mkdir -p "$fixtureApp/Contents/MacOS"
@@ -29,6 +37,7 @@ for _ in {1..30}; do
 done
 [ "$(cat "$readyFile" 2>/dev/null || true)" = "ready" ]
 [ "$(cat "$stateFile" 2>/dev/null || true)" = "opened" ]
+"$activateExecutable" com.ares.cmd.tab.fixture
 
 if [ "$expectTool" = "1" ]; then
   for _ in {1..30}; do
@@ -37,6 +46,9 @@ if [ "$expectTool" = "1" ]; then
   done
   [ "$(cat "$visibleReopenFile" 2>/dev/null || true)" = "1" ]
   [ "$(cat "$stateFile" 2>/dev/null || true)" = "opened" ]
+fi
+if [ "$expectTool" = "2" ]; then
+  [ ! -e "$visibleReopenFile" ]
 fi
 
 fixturePid="$(pgrep -n -f "$fixtureExecutable")"
@@ -56,7 +68,7 @@ done
 
 result="$(cat "$stateFile" 2>/dev/null || true)"
 "$activateExecutable" com.ares.cmd.tab.fixture --terminate 2>/dev/null || true
-if [ "$expectTool" = "1" ]; then
+if [ "$expectTool" != "0" ]; then
   [ "$result" = "reopened" ]
   echo "acceptance passed: existing window stayed single and windowless activation reopened"
 else
